@@ -52,7 +52,9 @@ call_tool(collector, "puppeteer", "puppeteer_click", Dict(
 disconnect_all(collector)
 ```
 
-## Supported Servers
+## Tested Servers
+
+The MCP.jl should work with most of the servers that is in nodejs (python MCP servers are just buggy yet.)
 
 MCP.jl has been tested with:
 
@@ -80,6 +82,21 @@ Check the `test` directory for complete examples:
 - `test_puppeteer.jl` - Web browser automation
 - `test_coinmarket.jl` - Crypto market data retrieval
 - `test.jl` - Basic server setup and configuration
+
+## ROADMAP
+
+- [ ] Python MCP server
+- [ ] MCP server exploration
+  - [ ] Initialization of the server could be automatized like installation and so on
+  - [ ] configuration deduction (So we should be able to know what are the required environment variables nd list them somehow)
+  - [ ] Python and nodejs server could be handled more seamlessly
+- [ ] Anthropic Desktop configuration could be used to initialize system
+- [ ] Remote MCP usage?
+- [ ] SSE transportlayer support?
+- [ ] More language? 
+- [ ] MCP Standard compliance https://modelcontextprotocol.io/
+
+Note we have this to create julia MCP servers: https://github.com/JuliaSMLM/ModelContextProtocol.jl
 
 ## Contributing
 
