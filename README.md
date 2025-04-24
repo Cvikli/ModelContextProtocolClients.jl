@@ -15,10 +15,10 @@ A Julia client for the Model Context Protocol (MCP) that allows communication wi
 ```julia
 # Add the package
 using Pkg
-Pkg.add(url="https://github.com/yourusername/MCP.jl")
+Pkg.add(url="https://github.com/Cvikli/MCP.jl")
 
 # Or clone directly
-git clone https://github.com/yourusername/MCP.jl
+git clone https://github.com/Cvikli/MCP.jl
 ```
 
 ## Quick Example
