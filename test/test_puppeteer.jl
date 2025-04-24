@@ -2,7 +2,7 @@
 add_server(collector, "puppeteer", "mcp/servers/src/puppeteer/dist/index.js")
 
 # First get the tools list to confirm we're connected
-tools = get_tools(collector, "puppeteer")
+tools = list_tools(collector, "puppeteer")
 println("Available puppeteer tools: ", [tool["name"] for tool in tools])
 
 # Navigate to a website with sandbox disabled

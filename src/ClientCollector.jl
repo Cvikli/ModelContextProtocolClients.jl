@@ -7,7 +7,7 @@ remove_server(collector::MCPCollector, server_id::String) = haskey(collector.ser
 disconnect_all(collector::MCPCollector) = (for (_, client) in collector.servers; close(client); end; empty!(collector.servers))
 
 get_all_tools(collector::MCPCollector) = [(server_id, tool_name, info) for (server_id, client) in collector.servers for (tool_name, info) in client.tools_by_name]
-get_tools(collector::MCPCollector, server_id::String) = isempty(collector.servers[server_id].tools_by_name) ? list_tools(collector, server_id) : collector.servers[server_id].tools_by_name
+list_tools(collector::MCPCollector, server_id::String) = isempty(collector.servers[server_id].tools_by_name) ? list_tools(collector, server_id) : collector.servers[server_id].tools_by_name
 
 # Collector level functions that use client functions
 function list_tools(collector::MCPCollector, server_id::String)

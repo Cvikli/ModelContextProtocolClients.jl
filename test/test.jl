@@ -20,12 +20,12 @@ collector = MCPCollector()
 # add_server(collector, "coinmarket", "mcp/coinmarket-mcp-server/src/coinmarket_service/server.py", Dict("COINMARKET_API_KEY" => "YOUR APIKEY"))
 # add_server(collector, "mcp-bitte", "https://mcp.bitte.ai/sse")
 
-# tools = get_tools(collector, "mcp-bitte")
-# tools = get_tools(collector, "raw-web-browser")
-# tools = get_tools(collector, "google-maps")
-# tools = get_tools(collector, "time")
-# tools = get_tools(collector, "sentry")
-# tools = get_tools(collector, "slack")
+# tools = list_tools(collector, "mcp-bitte")
+# tools = list_tools(collector, "raw-web-browser")
+# tools = list_tools(collector, "google-maps")
+# tools = list_tools(collector, "time")
+# tools = list_tools(collector, "sentry")
+# tools = list_tools(collector, "slack")
 
 # disconnect_all(collector)
 
