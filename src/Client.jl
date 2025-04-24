@@ -9,6 +9,7 @@ import Base: Process
 	req_id::Int=0
 	tools_by_name::Vector{Dict{String, Any}} = Vector{Dict{String, Any}}()
 	responses::Dict{Int, Dict} = Dict{Int, Dict}()
+	notifications::Vector{Dict} = Vector{Dict}()
 	pending_requests::Dict{Int, Bool} = Dict{Int, Bool}()
 	buffer::String = ""
 end
@@ -21,7 +22,7 @@ function MCPClient(path::String; env::Union{Dict{String,String}, Nothing}=nothin
 		# "python3 -m $module_name"
 		"python3"  # Just the command, arguments will be passed separately
 	elseif endswith(path, ".js")
-		"node $path"
+		"node"
 	else
 		error("Server script must be a .py or .js file: $path")
 	end
@@ -46,14 +47,17 @@ function handle_server_output(client::MCPClient, line::String, stdout_handler::F
 	
 	client.buffer *= line
 	try
-		@show "hey"
+		# @show "hey"
 		response = JSON.parse(client.buffer)
-		@show response
+		# @show response
 		# Process valid JSON-RPC response
-		if haskey(response, "id") && haskey(response, "jsonrpc")
+		if haskey(response, "id") && haskey(response, "jsonrpc") # if "id" is present, it's a response: https://modelcontextprotocol.io/docs/concepts/transports#responses
 			req_id = response["id"]
 			client.responses[req_id] = response
 			client.pending_requests[req_id] = false
+			client.buffer = ""
+		elseif haskey(response, "jsonrpc") # if no "id" is present, it's a notification: https://modelcontextprotocol.io/docs/concepts/transports#notifications
+			push!(client.notifications, response)
 			client.buffer = ""
 		end
 	catch
