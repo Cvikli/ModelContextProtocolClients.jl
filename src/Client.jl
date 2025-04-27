@@ -96,7 +96,7 @@ function list_tools(client::MCPClient)
 	
 	return client.tools_by_name
 end
-
+list_resources(client::MCPClient)=@assert "unimplemented"
 call_tool(client::MCPClient, raw_request::String)                = send_request(client, raw_request)
 call_tool(client::MCPClient, tool_name::String, arguments::Dict) = send_request(client, method="tools/call", params=Dict("name" => tool_name, "arguments" => arguments))
 
