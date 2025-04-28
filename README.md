@@ -92,7 +92,10 @@ Check the `test` directory for complete examples:
   - [ ] Python and nodejs server could be handled more seamlessly
 - [ ] Anthropic Desktop configuration could be used to initialize system
 - [ ] Remote MCP usage?
-- [ ] SSE transportlayer support?
+- [ ] Transport layer support:
+  - [x] stdio (so local servers should be supported)
+  - [ ] SSE transportlayer support?
+  - [ ] Websocket?
 - [ ] More language? 
 - [ ] MCP Standard compliance https://modelcontextprotocol.io/
 

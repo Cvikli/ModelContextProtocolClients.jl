@@ -1,6 +1,6 @@
 
-add_server(collector, "coinmarket", "mcp/coinmarket-mcp-server/src/coinmarket_service/__main__.py", Dict("COINMARKET_API_KEY" => "YOUR APIKEY"))
-tools = get_tools(collector, "coinmarket")
+add_server(collector, "coinmarket", "mcp/coinmarket-mcp-server/src/coinmarket_service/__main__.py", Dict("COINMARKET_API_KEY" => ENV["COINMARKET_API_KEY"]))
+tools = list_tools(collector, "coinmarket")
 println(tools)
 # Call get_currency_listings tool (which requires no arguments)
 response = call_tool(collector, "coinmarket", "get_currency_listings", Dict())

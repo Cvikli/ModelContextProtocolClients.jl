@@ -14,31 +14,65 @@ import Base: Process
 	buffer::String = ""
 end
 
-function MCPClient(path::String; env::Union{Dict{String,String}, Nothing}=nothing, stdout_handler::Function=(str)->println("SERVER: $str"))
-	!isfile(path) && error("Server script not found: $path")
-	command = if endswith(path, ".py")
-		module_path = dirname(path)
-		module_name = basename(module_path)
-		# "python3 -m $module_name"
-		"python3"  # Just the command, arguments will be passed separately
-	elseif endswith(path, ".js")
-		"node"
-	else
-		error("Server script must be a .py or .js file: $path")
-	end
+# Overload: Accept a command and arguments
+function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[]; 
+                  env::Union{Dict{String,String}, Nothing}=nothing, 
+                  stdout_handler::Function=(str)->println("SERVER: $str"),
+                  auto_initialize::Bool=true,
+                  client_name::String="julia-mcp-client",
+                  client_version::String=MCP.MCP_VERSION)
+    # Create command
+    cmd = command isa Cmd ? command : `$command $args`
+    
+    # Open process
+    process = env === nothing ?
+        open(pipeline(cmd, stderr=stdout), "r+") :
+        open(pipeline(setenv(cmd, env), stderr=stdout), "r+")
+    
+    # Create client
+    client = MCPClient(
+        command=string(command),
+        path=command isa Cmd ? "" : join(args, " "),
+        process=process,
+        env=env,
+        output_task=Task(() -> nothing)
+    )
+    
+    client.output_task = @async while !eof(process)
+        line = readline(process)
+        handle_server_output(client, line, stdout_handler)
+    end
+    
+    # Auto-initialize if requested
+    if auto_initialize
+        initialize(client, client_name=client_name, client_version=client_version)
+    end
+    
+    return client
+end
 
-	process = env === nothing ? 
-		open(pipeline(`$command $path`, stderr=stdout), "r+") : 
-		open(pipeline(setenv(`$command $path`, env), stderr=stdout), "r+")
-	
-	client = MCPClient(command=command, path=path, process=process, env=env, output_task=Task(() -> nothing))
-	
-	client.output_task = @async while !eof(process)
-		line = readline(process)
-		handle_server_output(client, line, stdout_handler)
-	end
-	
-	return client
+# Keep the original file-based constructor for backward compatibility
+function MCPClient(path::String; 
+                  env::Union{Dict{String,String}, Nothing}=nothing, 
+                  stdout_handler::Function=(str)->println("SERVER: $str"),
+                  auto_initialize::Bool=true,
+                  client_name::String="julia-mcp-client",
+                  client_version::String=MCP.MCP_VERSION)
+    !isfile(path) && error("Server script not found: $path")
+    command = if endswith(path, ".py")
+        "python3"
+    elseif endswith(path, ".js")
+        "node"
+    else
+        error("Server script must be a .py or .js file: $path")
+    end
+
+    return MCPClient(command, [path]; 
+                    env=env, 
+                    stdout_handler=stdout_handler, 
+                    auto_initialize=auto_initialize,
+                    client_name=client_name,
+                    client_version=client_version)
 end
 
 function handle_server_output(client::MCPClient, line::String, stdout_handler::Function)
@@ -49,7 +83,7 @@ function handle_server_output(client::MCPClient, line::String, stdout_handler::F
 	try
 		# @show "hey"
 		response = JSON.parse(client.buffer)
-		# @show response
+		@show response
 		# Process valid JSON-RPC response
 		if haskey(response, "id") && haskey(response, "jsonrpc") # if "id" is present, it's a response: https://modelcontextprotocol.io/docs/concepts/transports#responses
 			req_id = response["id"]
@@ -58,7 +92,10 @@ function handle_server_output(client::MCPClient, line::String, stdout_handler::F
 			client.buffer = ""
 		elseif haskey(response, "jsonrpc") # if no "id" is present, it's a notification: https://modelcontextprotocol.io/docs/concepts/transports#notifications
 			push!(client.notifications, response)
+			@warn "notification: $response"
 			client.buffer = ""
+		else
+			@warn "unknown message: $response"
 		end
 	catch
 		# Reset buffer if it gets too large
@@ -96,6 +133,37 @@ function list_tools(client::MCPClient)
 	
 	return client.tools_by_name
 end
+
+function initialize(client::MCPClient; 
+                   protocol_version::String="0.1.0", 
+                   client_name::String="julia-mcp-client", 
+                   client_version::String=MCP.MCP_VERSION, 
+                   capabilities::Dict=Dict())
+    params = Dict(
+        "protocolVersion" => protocol_version,
+        "clientInfo" => Dict(
+            "name" => client_name,
+            "version" => client_version
+        ),
+        "capabilities" => capabilities
+    )
+    
+    response = send_request(client, method="initialize", params=params)
+    
+    # Send initialized notification after successful initialization
+    response !== nothing && send_notification(client, method="notifications/initialized")
+    
+    return response
+end
+
+function send_notification(client::MCPClient; method::String, params::Dict=Dict())
+    json_str = """{"jsonrpc":"2.0","method":"$method","params":$(JSON.json(params))}"""
+    @show json_str
+    write(client.process, json_str * "\n")
+    flush(client.process)
+    return Dict("result" => "notification sent")
+end
+
 list_resources(client::MCPClient)=@assert "unimplemented"
 call_tool(client::MCPClient, raw_request::String)                = send_request(client, raw_request)
 call_tool(client::MCPClient, tool_name::String, arguments::Dict) = send_request(client, method="tools/call", params=Dict("name" => tool_name, "arguments" => arguments))
@@ -107,7 +175,6 @@ function send_request(client::MCPClient; method::String, params::Dict=Dict())
 	client.pending_requests[req_id] = true
 	
 	json_str = """{"jsonrpc":"2.0","id":$(req_id),"method":"$method","params":$(JSON.json(params))}"""
-	@show json_str
 	
 	write(client.process, json_str * "\n") # Send the request
 	flush(client.process)
@@ -121,16 +188,10 @@ function send_request(client::MCPClient; method::String, params::Dict=Dict())
 	end
 	
 	# Return response if we got one
-	if haskey(client.responses, req_id)
-		result = client.responses[req_id]
-		return result
-	end
-	
-	return nothing  # No response received within timeout
+	return haskey(client.responses, req_id) ? client.responses[req_id] : nothing
 end
 
 function send_request(client::MCPClient, json_str::String)
 	write(client.process, json_str * "\n") # for safety we send a newline (as what if the user forget that)
 	flush(client.process)
-	sleep(0.5)  # Allow time for server to respond
 end

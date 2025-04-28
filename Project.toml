@@ -2,7 +2,7 @@ name = "MCP"
 uuid = "d9f15c88-49d9-4048-bd6d-f446c3546e7f"
 authors = ["Cvikli <havlikmarcell@gmail.com>"]
 path = "."
-version = "0.1.0"
+version = "1.0.2"
 
 [deps]
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
