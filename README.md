@@ -149,16 +149,16 @@ Check the `test` directory for complete examples:
 - [x] Other language MCP server to be run by MCPClient (you only need to setup it and then send the "run command")
 - [x] MCP server exploration per folder
 - [x] Initialization of the server could be automatized like installation and so on
-- [ ] configuration deduction (So we should be able to know what are the required environment variables nd list them somehow)
+- [ ] configuration deduction (So we should be able to know what are the required environment variables nd list them somehow) (I don't know where does this know but sounds like hardcoded...? https://claudedesktopconfiggenerator.com/)
 - [x] Anthropic Desktop configuration could be used to initialize system
   - [x] mcp.json
   - [x] mcpServers
 - [ ] Remote MCP usage?
 - [ ] Transport layer support:
   - [x] stdio (so local servers should be supported)
-  - [ ] SSE transportlayer support?
-  - [ ] Websocket?
-- [ ] MCP Standard compliance https://modelcontextprotocol.io/
+  - [ ] SSE transportlayer support
+  - [ ] Websocket
+- [ ] MCP Standard compliance https://modelcontextprotocol.io/ test/mcp.json.example also shows great stuffs.
 - [ ] https://claudedesktopconfiggenerator.com/ how does this able to generate the ENV tag too??
 
 Note we have this to create julia MCP servers: https://github.com/JuliaSMLM/ModelContextProtocol.jl
