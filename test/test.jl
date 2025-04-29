@@ -89,6 +89,12 @@ send_request(client, """
 }
 """)
 #%%
+using MCP: load_mcp_servers_config
+load_mcp_servers_config(collector, "test/mcp.json")
+
+#%%
+
+#%%
 using MCP: send_request
 send_request(collector.servers["git"], """
 {

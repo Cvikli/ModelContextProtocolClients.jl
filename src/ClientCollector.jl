@@ -50,7 +50,8 @@ end
 function load_mcp_servers_config(collector::MCPCollector, config_path::String;
                                 auto_initialize::Bool=true,
                                 client_name::String="julia-mcp-client",
-                                client_version::String=MCP.MCP_VERSION)
+                                client_version::String=MCP.MCP_VERSION,
+                                log_level::Symbol=:info)
 	config = JSON.parse(read(config_path, String))
 	
 	# Check if we have the "mcp" key structure
@@ -64,7 +65,7 @@ function load_mcp_servers_config(collector::MCPCollector, config_path::String;
 	
 	for (server_id, server_config) in servers_config
 		command = server_config["command"]
-		args = server_config["args"]
+		args = String.(get(server_config, "args", String[]))
 		env = get(server_config, "env", nothing)
 		
 		# Convert env to Dict{String,String} if present
@@ -76,7 +77,14 @@ function load_mcp_servers_config(collector::MCPCollector, config_path::String;
 				  auto_initialize=auto_initialize,
 				  client_name=client_name,
 				  client_version=client_version,
-				  setup_command=nothing)
+				  setup_command=nothing,
+				  log_level=log_level)
+	end
+
+	# Print loaded servers
+	println("Loaded servers:")
+	for (server_id, client) in collector.servers
+	    println(" - $server_id: $(client.command) $(client.path)")
 	end
 	
 	return collector

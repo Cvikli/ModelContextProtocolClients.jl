@@ -55,7 +55,7 @@ disconnect_all(collector)
 
 ## Tested Servers
 
-The MCP.jl should work with most of the servers that is in nodejs (python MCP servers are just buggy yet.)
+The MCP.jl should work with most of the servers that is in nodejs or python
 
 MCP.jl has been tested with:
 
@@ -86,18 +86,21 @@ Check the `test` directory for complete examples:
 
 ## ROADMAP
 
-- [ ] Python MCP server
-- [ ] MCP server exploration
+- [x] NodeJS MCP server run by the MCPClient
+- [x] Python MCP server run by the MCPClient
+- [x] Other language MCP server to be run by MCPClient (you only need to setup it and then send the "run command")
+- [ ] MCP server exploration per folder
   - [ ] Initialization of the server could be automatized like installation and so on
   - [ ] configuration deduction (So we should be able to know what are the required environment variables nd list them somehow)
   - [ ] Python and nodejs server could be handled more seamlessly
 - [ ] Anthropic Desktop configuration could be used to initialize system
+  - [ ] mcp.json
+  - [ ] mcpServers
 - [ ] Remote MCP usage?
 - [ ] Transport layer support:
   - [x] stdio (so local servers should be supported)
   - [ ] SSE transportlayer support?
   - [ ] Websocket?
-- [ ] More language? 
 - [ ] MCP Standard compliance https://modelcontextprotocol.io/
 
 Note we have this to create julia MCP servers: https://github.com/JuliaSMLM/ModelContextProtocol.jl

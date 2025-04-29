@@ -13,6 +13,7 @@ import Base: Process
 	pending_requests::Dict{Int, Bool} = Dict{Int, Bool}()
 	buffer::String = ""
 	setup_command::Union{String, Cmd, Nothing} = nothing
+    log_level::Symbol=:info
 end
 
 # Overload: Accept a command and arguments
@@ -22,22 +23,30 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
                   auto_initialize::Bool=true,
                   client_name::String="julia-mcp-client",
                   client_version::String=MCP.MCP_VERSION,
-                  setup_command::Union{String, Cmd, Nothing}=nothing)
-    # Run install command if provided
-    if setup_command !== nothing
-        install_cmd = setup_command isa Cmd ? setup_command : `sh -c $setup_command`
-        @info "Running installation command: $install_cmd"
-        run(install_cmd)
-    end
-    
+                  setup_command::Union{String, Cmd, Nothing}=nothing,
+                  log_level::Symbol=:info)
     # Create command
     cmd = command isa Cmd ? command : `$command $args`
-    
-    # Open process
-    process = env === nothing ?
-        open(pipeline(cmd, stderr=stdout), "r+") :
-        open(pipeline(setenv(cmd, env), stderr=stdout), "r+")
-    
+    process = nothing
+    try
+        process = env === nothing ?
+            open(pipeline(cmd, stderr=stdout), "r+") :
+            open(pipeline(setenv(cmd, env), stderr=stdout), "r+")
+    catch e
+        if setup_command !== nothing
+            install_cmd = setup_command isa Cmd ? setup_command : `sh -c $setup_command`
+            @info "Initial process failed, we fallback to run the setup command: $install_cmd"
+            run(install_cmd)
+            # Retry process creation after setup
+            process = env === nothing ?
+                open(pipeline(cmd, stderr=stdout), "r+") :
+                open(pipeline(setenv(cmd, env), stderr=stdout), "r+")
+        else
+            @info "The run command failed, and we cannot run the setup_command as it wasn't provided, so we give up"
+            rethrow(e)
+        end
+    end
+
     # Create client
     client = MCPClient(
         command=string(command),
@@ -45,12 +54,12 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
         process=process,
         env=env,
         output_task=Task(() -> nothing),
-        setup_command=setup_command
+        setup_command=setup_command,
+        log_level=log_level
     )
     
     client.output_task = @async while !eof(process)
-        line = readline(process)
-        handle_server_output(client, line, stdout_handler)
+        handle_server_output(client, readline(process), stdout_handler)
     end
     
     # Auto-initialize if requested
@@ -67,7 +76,8 @@ function MCPClient(path::String;
                   auto_initialize::Bool=true,
                   client_name::String="julia-mcp-client",
                   client_version::String=MCP.MCP_VERSION,
-                  setup_command::Union{String, Cmd, Nothing}=nothing)
+                  setup_command::Union{String, Cmd, Nothing}=nothing,
+                  log_level::Symbol=:info)
     !isfile(path) && error("Server script not found: $path")
     command = if endswith(path, ".py")
         "python3"
@@ -83,7 +93,8 @@ function MCPClient(path::String;
                     auto_initialize=auto_initialize,
                     client_name=client_name,
                     client_version=client_version,
-                    setup_command=setup_command)
+                    setup_command=setup_command,
+                    log_level=log_level)
 end
 
 function handle_server_output(client::MCPClient, line::String, stdout_handler::Function)
@@ -94,7 +105,7 @@ function handle_server_output(client::MCPClient, line::String, stdout_handler::F
 	try
 		# @show "hey"
 		response = JSON.parse(client.buffer)
-		@show response
+		# @show response
 		# Process valid JSON-RPC response
 		if haskey(response, "id") && haskey(response, "jsonrpc") # if "id" is present, it's a response: https://modelcontextprotocol.io/docs/concepts/transports#responses
 			req_id = response["id"]
@@ -169,7 +180,6 @@ end
 
 function send_notification(client::MCPClient; method::String, params::Dict=Dict())
     json_str = """{"jsonrpc":"2.0","method":"$method","params":$(JSON.json(params))}"""
-    @show json_str
     write(client.process, json_str * "\n")
     flush(client.process)
     return Dict("result" => "notification sent")
