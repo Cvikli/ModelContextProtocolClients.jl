@@ -9,6 +9,7 @@ mkpath("mcp")  # Create mcp directory if it doesn't exist
 !isdir("mcp/servers") && run(`git clone https://github.com/modelcontextprotocol/servers.git mcp/servers`)
 !isdir("mcp/ashra-mcp") && run(`git clone https://github.com/getrupt/ashra-mcp mcp/ashra-mcp`)
 !isdir("mcp/mcp-twitter-noauth") && run(`git clone https://github.com/baryhuang/mcp-twitter-noauth.git mcp/mcp-twitter-noauth`)
+!isdir("mcp/gdrive-mcp-server") && run(`git clone https://github.com/felores/gdrive-mcp-server.git mcp/gdrive-mcp-server`)
 
 collector = MCPCollector()
 
@@ -88,9 +89,6 @@ send_request(client, """
   "params": {}í
 }
 """)
-#%%
-using MCP: load_mcp_servers_config
-load_mcp_servers_config(collector, "test/mcp.json")
 
 #%%
 
@@ -120,4 +118,5 @@ tools
 #%%
 using JSON
 JSON.parse(response["result"]["content"][1]["text"])
+#%%
 #%%

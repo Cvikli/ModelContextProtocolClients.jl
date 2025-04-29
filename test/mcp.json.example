@@ -1,0 +1,31 @@
+{
+  "mcpServers": {
+    "<server-name>": {
+      "command": "<executable>",
+      "args": ["<arg1>", "<arg2>", ...],
+      "env": {
+        "<ENV_VAR>": "<value>",
+        ...
+      },
+      "transport": "<stdio|sse>",
+      "url": "<optional-url-for-sse>",
+      "workingDir": "<optional-working-directory>"
+    },
+    ...
+  }
+}
+
+Key Fields:
+
+mcpServers: A dictionary mapping server names to their configurations.
+server-name: A unique identifier for the MCP server (e.g., filesystem, brave-search).
+command: The executable to run the server (e.g., npx, node, python, java).
+args: An array of command-line arguments passed to the executable (e.g., script paths, flags).
+env: A dictionary of environment variables (e.g., API keys, configuration settings).
+transport: Specifies the communication protocol, typically stdio (local) or sse (Server-Sent Events for remote). Defaults to stdio if omitted.
+url: Required for sse transport, specifying the remote endpoint (e.g., https://example.com/sse).
+workingDir: Optional field to set the working directory for the server process.
+
+
+
+https://claudedesktopconfiggenerator.com/

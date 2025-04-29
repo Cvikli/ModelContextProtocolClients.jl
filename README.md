@@ -10,6 +10,7 @@ A Julia client for the Model Context Protocol (MCP) that allows communication wi
 - Environment variable handling for secure credential management
 - Automatic server installation support
 - Tested with many popular MCP servers
+- Automatic MCP server discovery in directories
 
 ## Installation
 
@@ -53,6 +54,61 @@ call_tool(collector, "puppeteer", "puppeteer_click", Dict(
 disconnect_all(collector)
 ```
 
+## Auto-Discovery Example
+
+```julia
+using MCP
+
+# Create a server collector
+collector = MCPCollector()
+
+# Discover MCP servers in a directory
+explore_mcp_servers(collector, "./mcp", 
+                   exclude_patterns=[".git", "venv"],
+                   log_level=:info)
+
+# List all discovered tools
+for (server_id, tool_name, info) in get_all_tools(collector)
+    println("$server_id: $tool_name")
+end
+
+# Use a discovered tool
+call_tool(collector, "discovered_server_id", "tool_name", Dict("arg1" => "value1"))
+
+# Clean up
+disconnect_all(collector)
+```
+
+## Loading MCP Servers from Folders
+
+MCP.jl can automatically discover and load MCP servers from a directory structure. It supports both Node.js and Python projects, including those with pyproject.toml configuration.
+
+```julia
+using MCP
+
+# Create a collector
+collector = MCPCollector()
+
+# Explore a directory containing MCP servers
+explore_mcp_servers_in_directory(collector, "mcp/")
+
+# List all loaded clients
+using MCP: list_clients
+list_clients(collector)
+
+# Now you can use any of the discovered tools
+tools = list_tools(collector, "some_discovered_server")
+```
+
+The `explore_mcp_servers_in_directory` function will:
+
+1. Scan the specified directory for potential MCP servers
+2. Detect project types (Node.js or Python)
+3. Parse configuration files (package.json, pyproject.toml)
+4. Set up appropriate commands to run the servers
+5. Install dependencies if needed
+6. Verify that each server provides MCP tools
+
 ## Tested Servers
 
 The MCP.jl should work with most of the servers that is in nodejs or python
@@ -75,6 +131,8 @@ MCP.jl has been tested with:
 - `list_tools(collector, server_id)` - List available tools
 - `call_tool(collector, server_id, tool_name, arguments)` - Execute a tool
 - `disconnect_all(collector)` - Close all server connections
+- `explore_mcp_servers_in_directory(collector, directory; exclude_patterns=[])` - Discover MCP servers in a directory
+- `list_clients(collector)` - List all loaded MCP server IDs
 
 ## Examples
 
@@ -89,19 +147,19 @@ Check the `test` directory for complete examples:
 - [x] NodeJS MCP server run by the MCPClient
 - [x] Python MCP server run by the MCPClient
 - [x] Other language MCP server to be run by MCPClient (you only need to setup it and then send the "run command")
-- [ ] MCP server exploration per folder
-  - [ ] Initialization of the server could be automatized like installation and so on
-  - [ ] configuration deduction (So we should be able to know what are the required environment variables nd list them somehow)
-  - [ ] Python and nodejs server could be handled more seamlessly
-- [ ] Anthropic Desktop configuration could be used to initialize system
-  - [ ] mcp.json
-  - [ ] mcpServers
+- [x] MCP server exploration per folder
+- [x] Initialization of the server could be automatized like installation and so on
+- [ ] configuration deduction (So we should be able to know what are the required environment variables nd list them somehow)
+- [x] Anthropic Desktop configuration could be used to initialize system
+  - [x] mcp.json
+  - [x] mcpServers
 - [ ] Remote MCP usage?
 - [ ] Transport layer support:
   - [x] stdio (so local servers should be supported)
   - [ ] SSE transportlayer support?
   - [ ] Websocket?
 - [ ] MCP Standard compliance https://modelcontextprotocol.io/
+- [ ] https://claudedesktopconfiggenerator.com/ how does this able to generate the ENV tag too??
 
 Note we have this to create julia MCP servers: https://github.com/JuliaSMLM/ModelContextProtocol.jl
 

@@ -34,8 +34,8 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
             open(pipeline(setenv(cmd, env), stderr=stdout), "r+")
     catch e
         if setup_command !== nothing
-            install_cmd = setup_command isa Cmd ? setup_command : `sh -c $setup_command`
             @info "Initial process failed, we fallback to run the setup command: $install_cmd"
+            install_cmd = setup_command isa Cmd ? setup_command : `sh -c $setup_command`
             run(install_cmd)
             # Retry process creation after setup
             process = env === nothing ?
