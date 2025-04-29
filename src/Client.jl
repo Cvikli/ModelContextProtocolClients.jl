@@ -12,6 +12,7 @@ import Base: Process
 	notifications::Vector{Dict} = Vector{Dict}()
 	pending_requests::Dict{Int, Bool} = Dict{Int, Bool}()
 	buffer::String = ""
+	setup_command::Union{String, Cmd, Nothing} = nothing
 end
 
 # Overload: Accept a command and arguments
@@ -20,7 +21,15 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
                   stdout_handler::Function=(str)->println("SERVER: $str"),
                   auto_initialize::Bool=true,
                   client_name::String="julia-mcp-client",
-                  client_version::String=MCP.MCP_VERSION)
+                  client_version::String=MCP.MCP_VERSION,
+                  setup_command::Union{String, Cmd, Nothing}=nothing)
+    # Run install command if provided
+    if setup_command !== nothing
+        install_cmd = setup_command isa Cmd ? setup_command : `sh -c $setup_command`
+        @info "Running installation command: $install_cmd"
+        run(install_cmd)
+    end
+    
     # Create command
     cmd = command isa Cmd ? command : `$command $args`
     
@@ -35,7 +44,8 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
         path=command isa Cmd ? "" : join(args, " "),
         process=process,
         env=env,
-        output_task=Task(() -> nothing)
+        output_task=Task(() -> nothing),
+        setup_command=setup_command
     )
     
     client.output_task = @async while !eof(process)
@@ -51,13 +61,13 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
     return client
 end
 
-# Keep the original file-based constructor for backward compatibility
 function MCPClient(path::String; 
                   env::Union{Dict{String,String}, Nothing}=nothing, 
                   stdout_handler::Function=(str)->println("SERVER: $str"),
                   auto_initialize::Bool=true,
                   client_name::String="julia-mcp-client",
-                  client_version::String=MCP.MCP_VERSION)
+                  client_version::String=MCP.MCP_VERSION,
+                  setup_command::Union{String, Cmd, Nothing}=nothing)
     !isfile(path) && error("Server script not found: $path")
     command = if endswith(path, ".py")
         "python3"
@@ -72,7 +82,8 @@ function MCPClient(path::String;
                     stdout_handler=stdout_handler, 
                     auto_initialize=auto_initialize,
                     client_name=client_name,
-                    client_version=client_version)
+                    client_version=client_version,
+                    setup_command=setup_command)
 end
 
 function handle_server_output(client::MCPClient, line::String, stdout_handler::Function)

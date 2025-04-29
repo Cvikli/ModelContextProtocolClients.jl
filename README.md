@@ -6,8 +6,9 @@ A Julia client for the Model Context Protocol (MCP) that allows communication wi
 
 - Connect to multiple MCP servers simultaneously
 - Manage tool discovery and invocation
-- Support for Python and Node.js based MCP servers  
+- Support for Python and Node.js based MCP servers
 - Environment variable handling for secure credential management
+- Automatic server installation support
 - Tested with many popular MCP servers
 
 ## Installation
@@ -70,7 +71,7 @@ MCP.jl has been tested with:
 ### Core Functions
 
 - `MCPCollector()` - Create a new collector
-- `add_server(collector, id, path, [env])` - Connect to an MCP server
+- `add_server(collector, id, path, [env]; setup_command=nothing)` - Connect to an MCP server
 - `list_tools(collector, server_id)` - List available tools
 - `call_tool(collector, server_id, tool_name, arguments)` - Execute a tool
 - `disconnect_all(collector)` - Close all server connections

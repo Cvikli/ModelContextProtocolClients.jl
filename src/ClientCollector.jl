@@ -8,13 +8,15 @@ function add_server(collector::MCPCollector, server_id::String, path::String;
                    stdout_handler::Function=(str)->println("SERVER: $str"),
                    auto_initialize::Bool=true,
                    client_name::String="julia-mcp-client",
-                   client_version::String=MCP.MCP_VERSION)
+                   client_version::String=MCP.MCP_VERSION,
+                   setup_command::Union{String, Cmd, Nothing}=nothing)
     collector.servers[server_id] = MCPClient(path; 
                                            env=env, 
                                            stdout_handler=stdout_handler,
                                            auto_initialize=auto_initialize,
                                            client_name=client_name,
-                                           client_version=client_version)
+                                           client_version=client_version,
+                                           setup_command=setup_command)
 end
 
 remove_server(collector::MCPCollector, server_id::String) = haskey(collector.servers, server_id) && (close(collector.servers[server_id]); delete!(collector.servers, server_id))
@@ -26,13 +28,15 @@ function add_server(collector::MCPCollector, server_id::String, command::String,
                    stdout_handler::Function=(str)->println("SERVER: $str"),
                    auto_initialize::Bool=true,
                    client_name::String="julia-mcp-client",
-                   client_version::String=MCP.MCP_VERSION)
+                   client_version::String=MCP.MCP_VERSION,
+                   setup_command::Union{String, Cmd, Nothing}=nothing)
     collector.servers[server_id] = MCPClient(command, args; 
                                            env=env, 
                                            stdout_handler=stdout_handler,
                                            auto_initialize=auto_initialize,
                                            client_name=client_name,
-                                           client_version=client_version)
+                                           client_version=client_version,
+                                           setup_command=setup_command)
 end
 
 get_all_tools(collector::MCPCollector) = [(server_id, tool_name, info) for (server_id, client) in collector.servers for (tool_name, info) in client.tools_by_name]
@@ -71,7 +75,8 @@ function load_mcp_servers_config(collector::MCPCollector, config_path::String;
 				  env=env_dict,
 				  auto_initialize=auto_initialize,
 				  client_name=client_name,
-				  client_version=client_version)
+				  client_version=client_version,
+				  setup_command=nothing)
 	end
 	
 	return collector
