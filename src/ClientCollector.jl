@@ -19,6 +19,7 @@ function add_server(collector::MCPCollector, server_id::String, path::String;
                                            client_version=client_version,
                                            setup_command=setup_command)
 end
+
 function add_server(collector::MCPCollector, server_id::String, command::String, args::Vector{String}; 
                    env::Union{Dict{String, String}, Nothing}=nothing, 
                    stdout_handler::Function=(str)->println("SERVER: $str"),
@@ -33,6 +34,19 @@ function add_server(collector::MCPCollector, server_id::String, command::String,
                                            client_name=client_name,
                                            client_version=client_version,
                                            setup_command=setup_command)
+end
+
+# Add server with a URL (WebSocket or SSE)
+function add_server(collector::MCPCollector, server_id::String, url::String, transport_type::Symbol; 
+                   stdout_handler::Function=(str)->println("SERVER: $str"),
+                   auto_initialize::Bool=true,
+                   client_name::String="julia-mcp-client",
+                   client_version::String=MCP.MCP_VERSION)
+    collector.servers[server_id] = MCPClient(url, transport_type; 
+                                           stdout_handler=stdout_handler,
+                                           auto_initialize=auto_initialize,
+                                           client_name=client_name,
+                                           client_version=client_version)
 end
 
 remove_server(collector::MCPCollector, server_id::String) = haskey(collector.servers, server_id) && (close(collector.servers[server_id]); delete!(collector.servers, server_id))
@@ -67,26 +81,50 @@ function load_mcp_servers_config(collector::MCPCollector, config_path::String;
 	end
 	
 	for (server_id, server_config) in servers_config
-		command = server_config["command"]
-		args = String.(get(server_config, "args", String[]))
-		env = get(server_config, "env", nothing)
-		
-		# Convert env to Dict{String,String} if present
-		env_dict = env === nothing ? nothing : Dict{String,String}(k => string(v) for (k,v) in env)
-		
-		# Add server using the command and args directly
-		add_server(collector, server_id, command, args; 
-				  env=env_dict,
-				  auto_initialize=auto_initialize,
-				  client_name=client_name,
-				  client_version=client_version,
-				  setup_command=nothing)
+		# Check if this is a URL-based server (WebSocket or SSE)
+		if haskey(server_config, "url")
+			url = server_config["url"]
+			transport_type = if haskey(server_config, "transport")
+				Symbol(server_config["transport"])
+			elseif occursin("/sse", url)
+				:sse
+			elseif occursin("ws://", url) || occursin("wss://", url)
+				:websocket
+			else
+				:websocket  # Default to WebSocket
+			end
+			
+			add_server(collector, server_id, url, transport_type;
+					  auto_initialize=auto_initialize,
+					  client_name=client_name,
+					  client_version=client_version)
+		else
+			# Standard command-based server
+			command = server_config["command"]
+			args = String.(get(server_config, "args", String[]))
+			env = get(server_config, "env", nothing)
+			
+			# Convert env to Dict{String,String} if present
+			env_dict = env === nothing ? nothing : Dict{String,String}(k => string(v) for (k,v) in env)
+			
+			# Add server using the command and args directly
+			add_server(collector, server_id, command, args; 
+					  env=env_dict,
+					  auto_initialize=auto_initialize,
+					  client_name=client_name,
+					  client_version=client_version,
+					  setup_command=nothing)
+		end
 	end
 
 	# Print loaded servers
 	println("Loaded servers:")
 	for (server_id, client) in collector.servers
-	    println(" - $server_id: $(client.command) $(client.path)")
+		if client.transport !== nothing
+			println(" - $server_id: $(typeof(client.transport))")
+		else
+			println(" - $server_id: $(client.command) $(client.path)")
+		end
 	end
 	
 	return collector

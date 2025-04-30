@@ -1,16 +1,14 @@
-module MCP
 
-using JSON
 using HTTP
+using JSON
 using WebSockets
 
-# Get the package version from Project.toml
-const MCP_VERSION = "1.1.0"
+export TransportLayer, StdioTransport, SSETransport, WebSocketTransport
+export read_message, write_message, close_transport
 
-# Transport layer definitions
 abstract type TransportLayer end
 
-# Stdio Transport
+# Stdio Transport (existing implementation)
 struct StdioTransport <: TransportLayer
     process::Base.Process
 end
@@ -138,9 +136,7 @@ function read_message(transport::WebSocketTransport)
 end
 
 function write_message(transport::WebSocketTransport, message::String)
-    if transport.ws !== nothing
-        WebSockets.send(transport.ws, message)
-    end
+    WebSockets.send(transport.ws, message)
 end
 
 function close_transport(transport::WebSocketTransport)
@@ -151,13 +147,3 @@ function close_transport(transport::WebSocketTransport)
         try WebSockets.close(transport.ws) catch end
     end
 end
-
-include("Client.jl")
-include("ClientCollector.jl")
-
-export MCPClient, MCPCollector, TransportLayer, StdioTransport, SSETransport, WebSocketTransport
-export add_server, remove_server, disconnect_all, get_all_tools, list_tools, call_tool
-export load_mcp_servers_config, send_request, explore_mcp_servers_in_directory
-export read_message, write_message, close_transport
-
-end # module MCP

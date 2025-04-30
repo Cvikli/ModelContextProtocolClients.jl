@@ -1,11 +1,13 @@
 import Base: Process
+using HTTP
 
 @kwdef mutable struct MCPClient
-	command::String
-	path::String
-	process::Process
-	output_task::Task
-	env::Union{Dict{String,String}, Nothing}
+	command::Union{String, Nothing} = nothing
+	path::Union{String, Nothing} = nothing
+	process::Union{Process, Nothing} = nothing
+	transport::Union{TransportLayer, Nothing} = nothing
+	output_task::Union{Task, Nothing} = nothing
+	env::Union{Dict{String,String}, Nothing} = nothing
 	req_id::Int=0
 	tools_by_name::Vector{Dict{String, Any}} = Vector{Dict{String, Any}}()
 	responses::Dict{Int, Dict} = Dict{Int, Dict}()
@@ -16,7 +18,7 @@ import Base: Process
     log_level::Symbol=:info
 end
 
-# Overload: Accept a command and arguments
+# Overload: Accept a command and arguments (stdio transport)
 function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[]; 
                   env::Union{Dict{String,String}, Nothing}=nothing, 
                   stdout_handler::Function=(str)->println("SERVER: $str"),
@@ -48,19 +50,61 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
         end
     end
 
+    # Create transport layer
+    transport = StdioTransport(process)
+
     # Create client
     client = MCPClient(
         command=string(command),
         path=command isa Cmd ? "" : join(args, " "),
         process=process,
+        transport=transport,
         env=env,
-        output_task=Task(() -> nothing),
         setup_command=setup_command,
         log_level=log_level
     )
     
-    client.output_task = @async while !eof(process)
-        handle_server_output(client, readline(process), stdout_handler)
+    client.output_task = @async while true
+        message = read_message(transport)
+        message === nothing && break
+        handle_server_output(client, message, stdout_handler)
+    end
+    
+    # Auto-initialize if requested
+    if auto_initialize
+        initialize(client, client_name=client_name, client_version=client_version)
+    end
+    
+    return client
+end
+
+# WebSocket transport constructor
+function MCPClient(url::String, transport_type::Symbol=:websocket; 
+                  stdout_handler::Function=(str)->println("SERVER: $str"),
+                  auto_initialize::Bool=true,
+                  client_name::String="julia-mcp-client",
+                  client_version::String=MCP.MCP_VERSION,
+                  log_level::Symbol=:info)
+    
+    transport = if transport_type == :websocket
+        WebSocketTransport(url)
+    elseif transport_type == :sse
+        SSETransport(url)
+    else
+        error("Unsupported transport type: $transport_type. Use :websocket or :sse")
+    end
+    
+    # Create client
+    client = MCPClient(
+        transport=transport,
+        log_level=log_level
+    )
+    
+    client.output_task = @async while true
+        message = read_message(transport)
+        message === nothing && sleep(0.1)  # Avoid busy waiting
+        message === nothing && continue
+        handle_server_output(client, message, stdout_handler)
     end
     
     # Auto-initialize if requested
@@ -127,18 +171,35 @@ function handle_server_output(client::MCPClient, line::String, stdout_handler::F
 end
 
 function Base.close(client::MCPClient)
-	try kill(client.process) catch end
-	client.output_task.state != :done && Base.schedule(client.output_task, InterruptException(); error=true)
+	if client.transport !== nothing
+		close_transport(client.transport)
+	elseif client.process !== nothing
+		try kill(client.process) catch end
+	end
+	
+	if client.output_task !== nothing && client.output_task.state != :done
+		Base.schedule(client.output_task, InterruptException(); error=true)
+	end
 end
 
 function restart_with_env(client::MCPClient, env::Dict{String,String})
 	close(client)
-	process = open(pipeline(setenv(`$(client.command) $(client.path)`, env), stderr=stdout), "r+")
-	output_task = @async while !eof(process) println("SERVER: $(readline(process))") end
 	
-	client.process = process
-	client.output_task = output_task
-	client.req_id = 0
+	if client.command !== nothing && client.path !== nothing
+		process = open(pipeline(setenv(`$(client.command) $(client.path)`, env), stderr=stdout), "r+")
+		transport = StdioTransport(process)
+		
+		client.process = process
+		client.transport = transport
+		client.output_task = @async while true
+			message = read_message(transport)
+			message === nothing && break
+			println("SERVER: $message")
+		end
+		client.req_id = 0
+	else
+		error("Cannot restart client with new environment - no command/path available")
+	end
 	
 	return client
 end
@@ -181,8 +242,10 @@ end
 
 function send_notification(client::MCPClient; method::String, params::Dict=Dict())
     json_str = """{"jsonrpc":"2.0","method":"$method","params":$(JSON.json(params))}"""
-    write(client.process, json_str * "\n")
-    flush(client.process)
+    
+    # Use transport layer for all communication
+    write_message(client.transport, json_str)
+    
     return Dict("result" => "notification sent")
 end
 
@@ -198,8 +261,8 @@ function send_request(client::MCPClient; method::String, params::Dict=Dict())
 	
 	json_str = """{"jsonrpc":"2.0","id":$(req_id),"method":"$method","params":$(JSON.json(params))}"""
 	
-	write(client.process, json_str * "\n") # Send the request
-	flush(client.process)
+	# Use transport layer for all communication
+	write_message(client.transport, json_str)
 	
 	# Wait for response with timeout
 	timeout = 5.0  # 5 second timeout
@@ -214,6 +277,6 @@ function send_request(client::MCPClient; method::String, params::Dict=Dict())
 end
 
 function send_request(client::MCPClient, json_str::String)
-	write(client.process, json_str * "\n") # for safety we send a newline (as what if the user forget that)
-	flush(client.process)
+	# Use transport layer for all communication
+	write_message(client.transport, json_str)
 end

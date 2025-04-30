@@ -24,3 +24,5 @@ docs/site/
 Manifest.toml
 
 mcp/
+
+.vscode/settings.json

@@ -1,11 +1,15 @@
 name = "MCP"
 uuid = "d9f15c88-49d9-4048-bd6d-f446c3546e7f"
 authors = ["Cvikli <havlikmarcell@gmail.com>"]
-path = "."
-version = "1.0.2"
+version = "1.1.0"
 
 [deps]
+HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
 JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
+WebSockets = "104b5d7c-a370-577a-8038-80a2059c5097"
 
 [compat]
-JSON = "0.21.4"
+JSON = "0.21"
+HTTP = "1.0"
+julia = "1.10"
+WebSockets = "1.5"

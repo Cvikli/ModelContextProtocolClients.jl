@@ -11,6 +11,10 @@ A Julia client for the Model Context Protocol (MCP) that allows communication wi
 - Automatic server installation support
 - Tested with many popular MCP servers
 - Automatic MCP server discovery in directories
+- Multiple transport layer support:
+  - stdio (local processes)
+  - WebSockets
+  - Server-Sent Events (SSE)
 
 ## Installation
 
@@ -49,6 +53,28 @@ response = call_tool(collector, "puppeteer", "puppeteer_navigate", Dict(
 call_tool(collector, "puppeteer", "puppeteer_click", Dict(
     "selector" => "a:nth-of-type(2)"  # Click the second link
 ))
+
+# Clean up
+disconnect_all(collector)
+```
+
+## WebSocket and SSE Examples
+
+```julia
+using MCP
+
+# Create a collector
+collector = MCPCollector()
+
+# Add a WebSocket server
+add_server(collector, "websocket_server", "ws://localhost:8080/ws", :websocket)
+
+# Or add an SSE server
+add_server(collector, "sse_server", "http://localhost:8080/sse", :sse)
+
+# Use the servers just like local ones
+tools = list_tools(collector, "websocket_server")
+response = call_tool(collector, "websocket_server", "some_tool", Dict("param" => "value"))
 
 # Clean up
 disconnect_all(collector)
@@ -109,6 +135,45 @@ The `explore_mcp_servers_in_directory` function will:
 5. Install dependencies if needed
 6. Verify that each server provides MCP tools
 
+## Loading from Configuration
+
+You can also load servers from a configuration file that includes WebSocket and SSE servers:
+
+```julia
+using MCP
+
+# Create a collector
+collector = MCPCollector()
+
+# Load from config file
+load_mcp_servers_config(collector, "mcp.json")
+```
+
+Example mcp.json with different transport types:
+```json
+{
+  "mcp": {
+    "servers": {
+      "local_server": {
+        "command": "node",
+        "args": ["path/to/server.js"],
+        "env": {
+          "API_KEY": "your-api-key"
+        }
+      },
+      "websocket_server": {
+        "url": "ws://localhost:8080/ws",
+        "transport": "websocket"
+      },
+      "sse_server": {
+        "url": "http://localhost:8080/sse",
+        "transport": "sse"
+      }
+    }
+  }
+}
+```
+
 ## Tested Servers
 
 The MCP.jl should work with most of the servers that is in nodejs or python
@@ -127,7 +192,8 @@ MCP.jl has been tested with:
 ### Core Functions
 
 - `MCPCollector()` - Create a new collector
-- `add_server(collector, id, path, [env]; setup_command=nothing)` - Connect to an MCP server
+- `add_server(collector, id, path, [env]; setup_command=nothing)` - Connect to a local MCP server
+- `add_server(collector, id, url, transport_type)` - Connect to a remote MCP server via WebSocket or SSE
 - `list_tools(collector, server_id)` - List available tools
 - `call_tool(collector, server_id, tool_name, arguments)` - Execute a tool
 - `disconnect_all(collector)` - Close all server connections
@@ -140,6 +206,8 @@ Check the `test` directory for complete examples:
 
 - `test_puppeteer.jl` - Web browser automation
 - `test_coinmarket.jl` - Crypto market data retrieval
+- `test_websocket.jl` - WebSocket transport example
+- `test_sse.jl` - SSE transport example
 - `test.jl` - Basic server setup and configuration
 
 ## ROADMAP
@@ -154,10 +222,10 @@ Check the `test` directory for complete examples:
   - [x] mcp.json
   - [x] mcpServers
 - [ ] Remote MCP usage?
-- [ ] Transport layer support:
+- [x] Transport layer support:
   - [x] stdio (so local servers should be supported)
-  - [ ] SSE transportlayer support
-  - [ ] Websocket
+  - [x] SSE transportlayer support
+  - [x] Websocket
 - [ ] MCP Standard compliance https://modelcontextprotocol.io/ test/mcp.json.example also shows great stuffs.
 - [ ] https://claudedesktopconfiggenerator.com/ how does this able to generate the ENV tag too??
 

@@ -10,6 +10,7 @@ mkpath("mcp")  # Create mcp directory if it doesn't exist
 !isdir("mcp/ashra-mcp") && run(`git clone https://github.com/getrupt/ashra-mcp mcp/ashra-mcp`)
 !isdir("mcp/mcp-twitter-noauth") && run(`git clone https://github.com/baryhuang/mcp-twitter-noauth.git mcp/mcp-twitter-noauth`)
 !isdir("mcp/gdrive-mcp-server") && run(`git clone https://github.com/felores/gdrive-mcp-server.git mcp/gdrive-mcp-server`)
+!isdir("mcp/mcp-sse") && run(`git clone https://github.com/sidharthrajaram/mcp-sse.git mcp/mcp-sse`)
 
 collector = MCPCollector()
 
