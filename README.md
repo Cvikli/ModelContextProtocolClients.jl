@@ -18,7 +18,6 @@ That simple.
 - Automatic MCP server discovery in directories
 - Multiple transport layer support:
   - stdio (local processes)
-  - WebSockets
   - Server-Sent Events (SSE)
 
 ## Installation
@@ -236,6 +235,8 @@ Check the `test` directory for complete examples:
 - [ ] https://claudedesktopconfiggenerator.com/ how does this able to generate the ENV tag too??
 
 Note we have this to create julia MCP servers: https://github.com/JuliaSMLM/ModelContextProtocol.jl
+
+We don't care about the websocket MCP servers as there are too few from them. Most of them (>99%) are SSE and stdio
 
 ## Contributing
 
