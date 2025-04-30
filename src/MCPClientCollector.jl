@@ -1,10 +1,10 @@
-@kwdef struct MCPCollector
+@kwdef struct MCPClientCollector
 	servers::Dict{String, MCPClient} = Dict{String, MCPClient}()
 end
-list_clients(collector::MCPCollector) = collect(keys(collector.servers))
+list_clients(collector::MCPClientCollector) = collect(keys(collector.servers))
 
 # Add server with a path
-function add_server(collector::MCPCollector, server_id::String, 
+function add_server(collector::MCPClientCollector, server_id::String, 
   path::String; 
   env::Union{Dict{String, String}, Nothing}=nothing, 
                    stdout_handler::Function=(str)->println("SERVER: $str"),
@@ -21,7 +21,7 @@ function add_server(collector::MCPCollector, server_id::String,
                                            setup_command=setup_command)
 end
 
-function add_server(collector::MCPCollector, server_id::String, 
+function add_server(collector::MCPClientCollector, server_id::String, 
   command::String, args::Vector{String}; 
   env::Union{Dict{String, String}, Nothing}=nothing, 
                    stdout_handler::Function=(str)->println("SERVER: $str"),
@@ -39,7 +39,7 @@ function add_server(collector::MCPCollector, server_id::String,
 end
 
 # Add server with a URL (WebSocket or SSE)
-function add_server(collector::MCPCollector, server_id::String, 
+function add_server(collector::MCPClientCollector, server_id::String, 
   url::String, transport_type::Symbol; 
                    stdout_handler::Function=(str)->println("SERVER: $str"),
                    auto_initialize::Bool=true,
@@ -54,14 +54,14 @@ function add_server(collector::MCPCollector, server_id::String,
                                            log_level=log_level)
 end
 
-remove_server(collector::MCPCollector, server_id::String) = haskey(collector.servers, server_id) && (close(collector.servers[server_id]); delete!(collector.servers, server_id))
-disconnect_all(collector::MCPCollector) = (for (_, client) in collector.servers; close(client); end; empty!(collector.servers))
+remove_server(collector::MCPClientCollector, server_id::String) = haskey(collector.servers, server_id) && (close(collector.servers[server_id]); delete!(collector.servers, server_id))
+disconnect_all(collector::MCPClientCollector) = (for (_, client) in collector.servers; close(client); end; empty!(collector.servers))
 
 
-get_all_tools(collector::MCPCollector) = [(server_id, tool_name, info) for (server_id, client) in collector.servers for (tool_name, info) in client.tools_by_name]
-list_tools(collector::MCPCollector, server_id::String) = isempty(collector.servers[server_id].tools_by_name) ? list_tools(collector.servers[server_id]) : collector.servers[server_id].tools_by_name
+get_all_tools(collector::MCPClientCollector) = [(server_id, tool_name, info) for (server_id, client) in collector.servers for (tool_name, info) in client.tools_by_name]
+list_tools(collector::MCPClientCollector, server_id::String) = isempty(collector.servers[server_id].tools_by_name) ? list_tools(collector.servers[server_id]) : collector.servers[server_id].tools_by_name
 
-function call_tool(collector::MCPCollector, server_id::String, tool_name::String, arguments::Dict)
+function call_tool(collector::MCPClientCollector, server_id::String, tool_name::String, arguments::Dict)
 	!haskey(collector.servers, server_id) && error("Server $server_id not found or added")
 	return call_tool(collector.servers[server_id], tool_name, arguments)
 end
@@ -69,7 +69,7 @@ end
 # Supporting
 # - claude_desktop_config.json
 # - mcp.json
-function load_mcp_servers_config(collector::MCPCollector, config_path::String;
+function load_mcp_servers_config(collector::MCPClientCollector, config_path::String;
                                 auto_initialize::Bool=true,
                                 client_name::String="julia-mcp-client",
                                 client_version::String=MCP.MCP_VERSION,
@@ -135,7 +135,7 @@ function load_mcp_servers_config(collector::MCPCollector, config_path::String;
 	return collector
 end
 
-function explore_mcp_servers_in_directory(collector::MCPCollector, directory::String; 
+function explore_mcp_servers_in_directory(collector::MCPClientCollector, directory::String; 
                               exclude_patterns::Vector{String}=String[".git", "node_modules"],
                               auto_initialize::Bool=true,
                               stdout_handler::Function=(str)->println("SERVER: $str"),

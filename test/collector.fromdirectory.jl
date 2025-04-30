@@ -1,6 +1,6 @@
 
 using MCP
-collector = MCPCollector()
+collector = MCPClientCollector()
 explore_mcp_servers_in_directory(collector, "mcp/servers/src")
 
 #%%

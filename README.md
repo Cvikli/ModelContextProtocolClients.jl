@@ -32,7 +32,7 @@ Pkg.add("MCP")
 using MCP
 
 # Create a server collector
-collector = MCPCollector()
+collector = MCPClientCollector()
 
 # Add a Puppeteer server
 add_server(collector, "puppeteer", "path/to/puppeteer/dist/index.js")
@@ -63,7 +63,7 @@ disconnect_all(collector)
 using MCP
 
 # Create a collector
-collector = MCPCollector()
+collector = MCPClientCollector()
 
 # Add a WebSocket server
 add_server(collector, "websocket_server", "ws://localhost:8080/ws", :websocket)
@@ -85,7 +85,7 @@ disconnect_all(collector)
 using MCP
 
 # Create a server collector
-collector = MCPCollector()
+collector = MCPClientCollector()
 
 # Discover MCP servers in a directory
 explore_mcp_servers(collector, "./mcp", 
@@ -112,7 +112,7 @@ MCP.jl can automatically discover and load MCP servers from a directory structur
 using MCP
 
 # Create a collector
-collector = MCPCollector()
+collector = MCPClientCollector()
 
 # Explore a directory containing MCP servers
 explore_mcp_servers_in_directory(collector, "mcp/")
@@ -142,7 +142,7 @@ You can also load servers from a configuration file that includes WebSocket and 
 using MCP
 
 # Create a collector
-collector = MCPCollector()
+collector = MCPClientCollector()
 
 # Load from config file
 load_mcp_servers_config(collector, "mcp.json")
@@ -191,7 +191,7 @@ MCP.jl has been tested with:
 
 ### Core Functions
 
-- `MCPCollector()` - Create a new collector
+- `MCPClientCollector()` - Create a new collector
 - `add_server(collector, id, path, [env]; setup_command=nothing)` - Connect to a local MCP server
 - `add_server(collector, id, url, transport_type)` - Connect to a remote MCP server via WebSocket or SSE
 - `list_tools(collector, server_id)` - List available tools

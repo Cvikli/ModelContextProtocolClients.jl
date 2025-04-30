@@ -1,7 +1,7 @@
 using MCP
 
 # Create a collector
-collector = MCPCollector()
+collector = MCPClientCollector()
 
 # Add an SSE server
 add_server(collector, "sse_server", "http://0.0.0.0:8080/sse", :sse)

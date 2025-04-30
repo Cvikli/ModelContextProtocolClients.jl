@@ -1,5 +1,5 @@
 using MCP
-collector = MCPCollector()
+collector = MCPClientCollector()
 add_server(collector, "coinmarket", "mcp/coinmarket-mcp-server/src/coinmarket_service/__init__.py", env=Dict("COINMARKET_API_KEY" => ENV["COINMARKET_API_KEY"]))
 tools = list_tools(collector, "coinmarket")
 println(tools)

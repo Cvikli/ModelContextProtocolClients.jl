@@ -1,7 +1,7 @@
 using MCP
 
 # Create a collector
-collector = MCPCollector()
+collector = MCPClientCollector()
 
 # Add a WebSocket server
 add_server(collector, "websocket_server", "ws://localhost:8080/ws", :websocket)

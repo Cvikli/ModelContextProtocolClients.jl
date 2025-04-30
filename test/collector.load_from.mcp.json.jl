@@ -1,5 +1,5 @@
 using MCP
-collector = MCPCollector()
+collector = MCPClientCollector()
 load_mcp_servers_config(collector, "test/mcp1.json")
 
 #%%

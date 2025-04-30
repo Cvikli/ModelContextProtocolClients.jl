@@ -12,7 +12,7 @@ mkpath("mcp")  # Create mcp directory if it doesn't exist
 !isdir("mcp/gdrive-mcp-server") && run(`git clone https://github.com/felores/gdrive-mcp-server.git mcp/gdrive-mcp-server`)
 !isdir("mcp/mcp-sse") && run(`git clone https://github.com/sidharthrajaram/mcp-sse.git mcp/mcp-sse`)
 
-collector = MCPCollector()
+collector = MCPClientCollector()
 
 # Add servers with environment variables
 # Uncomment the servers you want to test
