@@ -14,7 +14,6 @@ That simple.
 - Support for Python and Node.js based MCP servers
 - Environment variable handling for secure credential management
 - Automatic server installation support
-- Tested with many popular MCP servers
 - Automatic MCP server discovery in directories
 - Multiple transport layer support:
   - stdio (local processes)
@@ -23,12 +22,8 @@ That simple.
 ## Installation
 
 ```julia
-# Add the package
 using Pkg
-Pkg.add(url="https://github.com/Cvikli/MCP.jl")
-
-# Or clone directly
-git clone https://github.com/Cvikli/MCP.jl
+Pkg.add("MCP")
 ```
 
 ## Quick Example
