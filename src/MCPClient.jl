@@ -1,4 +1,4 @@
-module MCP
+module MCPClient
 
 using JSON
 using HTTP
@@ -18,4 +18,5 @@ export add_server, remove_server, disconnect_all, get_all_tools, list_tools, cal
 export load_mcp_servers_config, send_request, explore_mcp_servers_in_directory
 export read_message, write_message, close_transport
 
-end # module MCP
+
+end # module MCPClient
