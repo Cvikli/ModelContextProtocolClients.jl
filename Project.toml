@@ -1,7 +1,7 @@
-name = "MCP"
-uuid = "d9f15c88-49d9-4048-bd6d-f446c3546e7f"
+name = "MCPClient"
+uuid = "10797f7c-2754-4c53-bb22-bbbf17e366f1"
 authors = ["Cvikli <havlikmarcell@gmail.com>"]
-version = "1.1.0"
+version = "0.1.0"
 
 [deps]
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
