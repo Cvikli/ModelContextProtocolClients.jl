@@ -2,6 +2,7 @@ module MCPClient
 
 using JSON
 using HTTP
+import Base: Process
 using WebSockets: WebSocket, open, close
 using WebSockets
 
@@ -12,8 +13,6 @@ const MCP_VERSION = "1.1.0"
 include("Transport.jl")
 
 
-import Base: Process
-using HTTP
 
 @kwdef mutable struct MCPClient
 	command::Union{String, Nothing} = nothing
