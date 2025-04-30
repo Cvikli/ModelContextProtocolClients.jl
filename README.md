@@ -236,7 +236,7 @@ Check the `test` directory for complete examples:
 
 Note we have this to create julia MCP servers: https://github.com/JuliaSMLM/ModelContextProtocol.jl
 
-We don't care about the websocket MCP servers as there are too few from them. Most of them (>99%) are SSE and stdio
+We don't care about the websocket MCP servers as there are too few from them. Most of them (>99%) are SSE and stdio. But could be easily ported from here if we find examples. 
 
 ## Contributing
 
