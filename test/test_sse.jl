@@ -23,3 +23,9 @@ println("Tool response: ", response)
 
 # Clean up
 disconnect_all(collector)
+
+#%%
+
+for tool in tools
+    println(" - $(tool["name"]): $(get(tool, "description", "No description"))")
+end

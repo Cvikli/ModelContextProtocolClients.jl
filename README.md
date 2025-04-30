@@ -186,6 +186,7 @@ MCP.jl has been tested with:
 - **sentry**: Error monitoring
 - **slack**: Messaging platform integration
 - **web-browser**: Web browsing RAG
+- **https://mcp.bitte.ai/sse**: Blockchain empowered by agents
 
 ## API Reference
 
@@ -221,11 +222,11 @@ Check the `test` directory for complete examples:
 - [x] Anthropic Desktop configuration could be used to initialize system
   - [x] mcp.json
   - [x] mcpServers
-- [ ] Remote MCP usage?
+- [x] Remote MCP usage for SSE
 - [x] Transport layer support:
   - [x] stdio (so local servers should be supported)
   - [x] SSE transportlayer support
-  - [x] Websocket
+  - [ ] Websocket (partially ready... also we need examples to test... also could be similar to SSE)
 - [ ] MCP Standard compliance https://modelcontextprotocol.io/ test/mcp.json.example also shows great stuffs.
 - [ ] https://claudedesktopconfiggenerator.com/ how does this able to generate the ENV tag too??
 
