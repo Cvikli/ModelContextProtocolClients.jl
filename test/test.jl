@@ -1,4 +1,4 @@
-using MCP
+using MCPclient
 
 mkpath("mcp")  # Create mcp directory if it doesn't exist
 

@@ -1,4 +1,4 @@
-name = "MCPClient"
+name = "MCPclient"
 uuid = "10797f7c-2754-4c53-bb22-bbbf17e366f1"
 authors = ["Cvikli <havlikmarcell@gmail.com>"]
 version = "1.1.0"

@@ -1,18 +1,3 @@
-module MCPClient
-
-using JSON
-using HTTP
-import Base: Process
-using WebSockets: WebSocket, open, close
-using WebSockets
-
-# Get the package version from Project.toml
-const MCP_VERSION = "1.1.0"
-
-
-include("Transport.jl")
-
-
 
 @kwdef mutable struct MCPClient
 	command::Union{String, Nothing} = nothing
@@ -37,7 +22,7 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
                   stdout_handler::Function=(str)->println("SERVER: $str"),
                   auto_initialize::Bool=true,
                   client_name::String="julia-mcp-client",
-                  client_version::String=MCP.MCP_VERSION,
+                  client_version::String=MCPclient_VERSION,
                   setup_command::Union{String, Cmd, Nothing}=nothing,
                   log_level::Symbol=:info)
     # Create transport layer with process handling
@@ -73,7 +58,7 @@ function MCPClient(url::String, transport_type::Symbol;
                   stdout_handler::Function=(str)->println("SERVER: $str"),
                   auto_initialize::Bool=true,
                   client_name::String="julia-mcp-client",
-                  client_version::String=MCP.MCP_VERSION,
+                  client_version::String=MCPclient_VERSION,
                   log_level::Symbol=:info)
     
     transport = if transport_type == :websocket
@@ -128,7 +113,7 @@ function MCPClient(path::String;
                   stdout_handler::Function=(str)->nothing,
                   auto_initialize::Bool=true,
                   client_name::String="julia-mcp-client",
-                  client_version::String=MCP.MCP_VERSION,
+                  client_version::String=MCPclient_VERSION,
                   setup_command::Union{String, Cmd, Nothing}=nothing,
                   log_level::Symbol=:info)
     !isfile(path) && error("Server script not found: $path")
@@ -237,7 +222,7 @@ end
 function initialize(client::MCPClient; 
                    protocol_version::String="0.1.0", 
                    client_name::String="julia-mcp-client", 
-                   client_version::String=MCP.MCP_VERSION, 
+                   client_version::String=MCPclient_VERSION, 
                    capabilities::Dict=Dict())
     params = Dict(
         "protocolVersion" => protocol_version,
@@ -294,16 +279,3 @@ function send_request(client::MCPClient, json_str::String)
 	# Use transport layer for all communication
 	write_message(client.transport, json_str)
 end
-
-
-
-
-include("MCPClientCollector.jl")
-
-export MCPClient, MCPClientCollector, TransportLayer, StdioTransport, SSETransport, WebSocketTransport
-export add_server, remove_server, disconnect_all, get_all_tools, list_tools, call_tool
-export load_mcp_servers_config, send_request, explore_mcp_servers_in_directory
-export read_message, write_message, close_transport
-
-
-end # module MCPClient
