@@ -1,4 +1,4 @@
-# MCP.jl
+# MCPClient.jl
 
 A Julia client for the Model Context Protocol (MCP) that allows communication with various MCP servers. This package simplifies integrating AI tools into your Julia applications through a consistent interface.
 
@@ -23,13 +23,13 @@ That simple.
 
 ```julia
 using Pkg
-Pkg.add("MCP")
+Pkg.add("MCPClient")
 ```
 
 ## Quick Example
 
 ```julia
-using MCP
+using MCPClient
 
 # Create a server collector
 collector = MCPClientCollector()
@@ -60,7 +60,7 @@ disconnect_all(collector)
 ## WebSocket and SSE Examples
 
 ```julia
-using MCP
+using MCPClient
 
 # Create a collector
 collector = MCPClientCollector()
@@ -82,7 +82,7 @@ disconnect_all(collector)
 ## Auto-Discovery Example
 
 ```julia
-using MCP
+using MCPClient
 
 # Create a server collector
 collector = MCPClientCollector()
@@ -109,7 +109,7 @@ disconnect_all(collector)
 MCP.jl can automatically discover and load MCP servers from a directory structure. It supports both Node.js and Python projects, including those with pyproject.toml configuration.
 
 ```julia
-using MCP
+using MCPClient
 
 # Create a collector
 collector = MCPClientCollector()
@@ -118,7 +118,7 @@ collector = MCPClientCollector()
 explore_mcp_servers_in_directory(collector, "mcp/")
 
 # List all loaded clients
-using MCP: list_clients
+using MCPClient: list_clients
 list_clients(collector)
 
 # Now you can use any of the discovered tools
@@ -139,7 +139,7 @@ The `explore_mcp_servers_in_directory` function will:
 You can also load servers from a configuration file that includes WebSocket and SSE servers:
 
 ```julia
-using MCP
+using MCPClient
 
 # Create a collector
 collector = MCPClientCollector()
@@ -175,9 +175,9 @@ Example mcp.json with different transport types:
 
 ## Tested Servers
 
-The MCP.jl should work with most of the servers that is in nodejs or python
+The MCPClient.jl should work with most of the servers that is in nodejs or python
 
-MCP.jl has been tested with:
+MCPClient.jl has been tested with:
 
 - **puppeteer**: Browser automation
 - **time**: Timezone conversion services
