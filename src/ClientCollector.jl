@@ -4,8 +4,9 @@ end
 list_clients(collector::MCPCollector) = collect(keys(collector.servers))
 
 # Add server with a path
-function add_server(collector::MCPCollector, server_id::String, path::String; 
-                   env::Union{Dict{String, String}, Nothing}=nothing, 
+function add_server(collector::MCPCollector, server_id::String, 
+  path::String; 
+  env::Union{Dict{String, String}, Nothing}=nothing, 
                    stdout_handler::Function=(str)->println("SERVER: $str"),
                    auto_initialize::Bool=true,
                    client_name::String="julia-mcp-client",
@@ -20,8 +21,9 @@ function add_server(collector::MCPCollector, server_id::String, path::String;
                                            setup_command=setup_command)
 end
 
-function add_server(collector::MCPCollector, server_id::String, command::String, args::Vector{String}; 
-                   env::Union{Dict{String, String}, Nothing}=nothing, 
+function add_server(collector::MCPCollector, server_id::String, 
+  command::String, args::Vector{String}; 
+  env::Union{Dict{String, String}, Nothing}=nothing, 
                    stdout_handler::Function=(str)->println("SERVER: $str"),
                    auto_initialize::Bool=true,
                    client_name::String="julia-mcp-client",
@@ -37,16 +39,19 @@ function add_server(collector::MCPCollector, server_id::String, command::String,
 end
 
 # Add server with a URL (WebSocket or SSE)
-function add_server(collector::MCPCollector, server_id::String, url::String, transport_type::Symbol; 
+function add_server(collector::MCPCollector, server_id::String, 
+  url::String, transport_type::Symbol; 
                    stdout_handler::Function=(str)->println("SERVER: $str"),
                    auto_initialize::Bool=true,
                    client_name::String="julia-mcp-client",
-                   client_version::String=MCP.MCP_VERSION)
+                   client_version::String=MCP.MCP_VERSION,
+                   log_level::Symbol=:info)
     collector.servers[server_id] = MCPClient(url, transport_type; 
                                            stdout_handler=stdout_handler,
                                            auto_initialize=auto_initialize,
                                            client_name=client_name,
-                                           client_version=client_version)
+                                           client_version=client_version,
+                                           log_level=log_level)
 end
 
 remove_server(collector::MCPCollector, server_id::String) = haskey(collector.servers, server_id) && (close(collector.servers[server_id]); delete!(collector.servers, server_id))

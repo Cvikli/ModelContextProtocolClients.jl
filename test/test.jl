@@ -31,13 +31,13 @@ collector = MCPCollector()
 # COINMARKET_API_KEY from environment or fallback
 # add_server(collector, "coinmarket", "mcp/coinmarket-mcp-server/src/coinmarket_service/server.py", 
 #           Dict("COINMARKET_API_KEY" => ENV["COINMARKET_API_KEY"]))
-# add_server(collector, "mcp-bitte", "https://mcp.bitte.ai/sse")
+add_server(collector, "mcp-bitte", "https://mcp.bitte.ai/sse", :sse)
 # add_server(collector, "twitter", "mcp/mcp-twitter-noauth/src/mcp_server_twitter_noauth/__init__.py")
 # add_server(collector, "git", "mcp/servers/src/git/src/mcp_server_git/__main__.py")
 # add_server(collector, "fetch", "mcp/servers/src/fetch/src/mcp_server_fetch/__main__.py")
-client = MCPClient(`python3 -m mcp_server_fetch`)
+# client = MCPClient(`python3 -m mcp_server_fetch`)
 # client = MCPClient(`node mcp/servers/src/google-maps/dist/index.js`, env=Dict("GOOGLE_MAPS_API_KEY" => ENV["GOOGLE_MAPS_API_KEY"]))
-
+client = list_tools(collector, "mcp-bitte")
 # tools = list_tools(collector, "mcp-bitte")
 # tools = list_tools(collector, "raw-web-browser")
 # tools = list_tools(collector, "google-maps")
@@ -64,7 +64,7 @@ client = MCPClient(`python3 -m mcp_server_fetch`)
 #   "id": 1
 # }
 # """)
-@show send_request(client, method="initialize", params=Dict())
+# @show send_request(client, method="initialize", params=Dict())
 
 # @show send_request(client, """
 # {
@@ -73,7 +73,7 @@ client = MCPClient(`python3 -m mcp_server_fetch`)
 #   "params": {}
 # }
 # """)
-@show send_request(client, method="tools/list", params=Dict())
+# @show send_request(client, method="tools/list", params=Dict())
 # @show send_request(client, """
 # {
 #   "jsonrpc": "2.0",
@@ -82,6 +82,8 @@ client = MCPClient(`python3 -m mcp_server_fetch`)
 #   "params": {}
 # }
 # """)
+#%%
+disconnect_all(collector)
 #%%
 send_request(client, """
 {

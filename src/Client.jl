@@ -27,37 +27,14 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
                   client_version::String=MCP.MCP_VERSION,
                   setup_command::Union{String, Cmd, Nothing}=nothing,
                   log_level::Symbol=:info)
-    # Create command
-    cmd = command isa Cmd ? command : `$command $args`
-    process = nothing
-    try
-        process = env === nothing ?
-            open(pipeline(cmd, stderr=stdout), "r+") :
-            open(pipeline(setenv(cmd, env), stderr=stdout), "r+")
-    catch e
-        @warn "The run command failed, and we cannot run the setup_command as it wasn't provided, so we give up"
-        if setup_command !== nothing
-            @info "Initial process failed, we fallback to run the setup command: $install_cmd"
-            install_cmd = setup_command isa Cmd ? setup_command : `sh -c $setup_command`
-            run(install_cmd)
-            # Retry process creation after setup
-            process = env === nothing ?
-                open(pipeline(cmd, stderr=stdout), "r+") :
-                open(pipeline(setenv(cmd, env), stderr=stdout), "r+")
-        else
-            @info "The run command failed, and we cannot run the setup_command as it wasn't provided, so we give up"
-            rethrow(e)
-        end
-    end
-
-    # Create transport layer
-    transport = StdioTransport(process)
+    # Create transport layer with process handling
+    transport = StdioTransport(command, args; env=env, setup_command=setup_command)
 
     # Create client
     client = MCPClient(
         command=string(command),
         path=command isa Cmd ? "" : join(args, " "),
-        process=process,
+        process=transport.process,
         transport=transport,
         env=env,
         setup_command=setup_command,
@@ -79,7 +56,7 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
 end
 
 # WebSocket transport constructor
-function MCPClient(url::String, transport_type::Symbol=:websocket; 
+function MCPClient(url::String, transport_type::Symbol; 
                   stdout_handler::Function=(str)->println("SERVER: $str"),
                   auto_initialize::Bool=true,
                   client_name::String="julia-mcp-client",
@@ -98,6 +75,7 @@ function MCPClient(url::String, transport_type::Symbol=:websocket;
     client = MCPClient(
         transport=transport,
         log_level=log_level
+        # Don't set path explicitly since it defaults to nothing
     )
     
     client.output_task = @async while true
@@ -107,9 +85,26 @@ function MCPClient(url::String, transport_type::Symbol=:websocket;
         handle_server_output(client, message, stdout_handler)
     end
     
-    # Auto-initialize if requested
-    if auto_initialize
+    # Wait for connection to be established (up to 5 seconds)
+    connection_timeout = 5.0
+    start_time = time()
+    
+    # Check connection based on transport type
+    is_connected() = transport_type == :sse ? 
+                     transport.session_id !== nothing : 
+                     transport.ws !== nothing
+    
+    # Wait until connected or timeout
+    while !is_connected() && (time() - start_time < connection_timeout)
+        sleep(0.01)
+    end
+    
+    # Auto-initialize if requested and connection is established
+    if auto_initialize && is_connected()
+        client.log_level == :debug && @debug "Connection established, sending initialize request"
         initialize(client, client_name=client_name, client_version=client_version)
+    elseif auto_initialize && !is_connected()
+        @warn "Connection not established within timeout, skipping initialization"
     end
     
     return client
@@ -117,7 +112,7 @@ end
 
 function MCPClient(path::String; 
                   env::Union{Dict{String,String}, Nothing}=nothing, 
-                  stdout_handler::Function=(str)->println("SERVER: $str"),
+                  stdout_handler::Function=(str)->nothing,
                   auto_initialize::Bool=true,
                   client_name::String="julia-mcp-client",
                   client_version::String=MCP.MCP_VERSION,
@@ -143,7 +138,6 @@ function MCPClient(path::String;
 end
 
 function handle_server_output(client::MCPClient, line::String, stdout_handler::Function)
-	# Always log output
 	stdout_handler(line)
 	
 	client.buffer *= line
@@ -159,7 +153,12 @@ function handle_server_output(client::MCPClient, line::String, stdout_handler::F
 			client.buffer = ""
 		elseif haskey(response, "jsonrpc") # if no "id" is present, it's a notification: https://modelcontextprotocol.io/docs/concepts/transports#notifications
 			push!(client.notifications, response)
-			@warn "notification: $response"
+            if haskey(response, "method") && response["method"] == "notifications/cancelled"
+				@warn "Request cancelled: $(get(response["params"], "reason", "Unknown reason"))"
+			else
+				# Log other notifications at info level
+                @warn "notification: $response"
+			end
 			client.buffer = ""
 		else
 			@warn "unknown message: $response"
@@ -256,12 +255,10 @@ call_tool(client::MCPClient, tool_name::String, arguments::Dict) = send_request(
 function send_request(client::MCPClient; method::String, params::Dict=Dict())
 	req_id = (client.req_id += 1)
 	
-	# Mark request as pending
 	client.pending_requests[req_id] = true
 	
 	json_str = """{"jsonrpc":"2.0","id":$(req_id),"method":"$method","params":$(JSON.json(params))}"""
 	
-	# Use transport layer for all communication
 	write_message(client.transport, json_str)
 	
 	# Wait for response with timeout
