@@ -72,10 +72,11 @@ mutable struct SSETransport <: TransportLayer
     buffer::Channel{String}
     task::Union{Task, Nothing}
     session_id::Union{String, Nothing}
+    message_endpoint::Union{String, Nothing}  # Store the message endpoint URL
 end
 
 function SSETransport(url::String)
-    SSETransport(url, nothing, Channel{String}(100), nothing, nothing)
+    SSETransport(url, nothing, Channel{String}(100), nothing, nothing, nothing)
 end
 
 function start_sse_client(transport::SSETransport)
@@ -94,26 +95,54 @@ function start_sse_client(transport::SSETransport)
                     
                     while !eof(buffer)
                         line = readline(buffer)
+                        # @show line
                         if startswith(line, "event:")
                             current_event = strip(line[7:end])
-                        elseif startswith(line, "data:")
-                            current_data = strip(line[6:end])
-                        elseif line == "" && !isempty(current_data)  # Allow empty event
+                        elseif startswith(line, "data:") || (line !== "" && !isempty(current_data))
+                            # Accumulate data lines for the same event
+                            if !isempty(current_data)
+                                current_data *= line
+                            else
+                                current_data = strip(line[6:end])
+                            end
+                        elseif line == "" && !isempty(current_data)  # Empty line marks end of event
                             # Process complete event
                             if current_event == "endpoint"
-                                # The endpoint event contains the session_id
-                                if occursin("session_id=", current_data)
-                                    transport.session_id = match(r"session_id=([^&]+)", current_data).captures[1]
+                                # The server sends the full URI with the session_id as a query parameter
+                                @info "Received endpoint event: $current_data"
+                                session_id_match = match(r"sessionId=([^&\s]+)", current_data)
+                                if session_id_match !== nothing
+                                    transport.session_id = session_id_match.captures[1]
+                                    # Store the message endpoint for later use
+                                    transport.message_endpoint = current_data
                                     @info "SSE session established with ID: $(transport.session_id)"
+                                else
+                                    @warn "Failed to extract session_id from endpoint $current_data"
                                 end
                             elseif current_event == "message"
                                 # Regular message event
-                                put!(transport.buffer, current_data)
+                                @debug "Received message event: $current_data"
+                                # Try to validate if it's complete JSON before putting in buffer
+                                try
+                                    # Just check if it parses, don't store the result
+                                    JSON.parse(current_data)
+                                    put!(transport.buffer, current_data)
+                                catch e
+                                    @warn "Received incomplete JSON in message event, skipping: $(typeof(e))"
+                                    @debug "Incomplete JSON content: $current_data"
+                                end
+                            else
+                                @debug "Received unknown event type: $current_event with $current_data"
                             end
                             
                             # Reset for next event
                             current_event = ""
                             current_data = ""
+                        else
+                            @warn "Prepare our protocol to handle this event too"
+                            @show current_event
+                            @show current_data
+                            @warn "Received unknown event type: $line"
                         end
                     end
                     
@@ -137,13 +166,22 @@ end
 
 function read_message(transport::SSETransport)
     if transport.client === nothing
+        @info "Starting SSE client connection"
         start_sse_client(transport)
         
         # Wait a short time for the session to be established
         if transport.session_id === nothing
-            for _ in 1:10  # Wait up to 5 seconds
+            @info "Waiting for SSE session to be established..."
+            for i in 1:30  # Wait up to 15 seconds
                 sleep(0.1)
-                transport.session_id !== nothing && break
+                if transport.session_id !== nothing
+                    @info "SSE session established after $(i*0.5) seconds"
+                    break
+                end
+            end
+            
+            if transport.session_id === nothing
+                @warn "Failed to establish SSE session within timeout"
             end
         end
     end
@@ -158,38 +196,84 @@ end
 function write_message(transport::SSETransport, message::String)
     println("CLIENT: $message")
     # SSE is unidirectional, so we need to make a separate HTTP request
-    # The server expects messages at the /messages/ endpoint with session_id parameter
     if transport.session_id === nothing
         @error "Cannot send message: No session_id available"
-        # Print a nicely formatted stacktrace
-        println(stderr, "Stacktrace:")
-        Base.show_backtrace(stderr, stacktrace())
-        return
+        @info "Current transport state: client=$(transport.client !== nothing), task_running=$(transport.task !== nothing && !istaskdone(transport.task))"
+        
+        # Try to reconnect if the client is not connected
+        if transport.client === nothing || (transport.task !== nothing && istaskdone(transport.task))
+            @info "Attempting to reconnect SSE client before sending message"
+            start_sse_client(transport)
+            
+            # Wait for session establishment
+            for i in 1:10
+                sleep(0.5)
+                if transport.session_id !== nothing
+                    @info "SSE session re-established"
+                    break
+                end
+            end
+        end
+        
+        # If still no session, we can't proceed
+        # if transport.session_id === nothing
+        #     println(stderr, "Stacktrace:")
+        #     Base.show_backtrace(stderr, stacktrace())
+        #     return
+        # end
     end
     
-    message_url = replace(transport.url, "/sse" => "/messages/") 
-    # Add session_id as query parameter
-    if !occursin("?", message_url)
-        message_url = message_url * "?session_id=" * transport.session_id
+    # Determine the message endpoint URL
+    message_url = if transport.message_endpoint !== nothing
+        # Use the endpoint provided by the server, but ensure it's an absolute URL
+        if startswith(transport.message_endpoint, "/")
+            # It's a relative URL, so prepend the base URL
+            base_url = replace(transport.url, r"/sse/?.*$" => "")
+            base_url * transport.message_endpoint
+        else
+            # It's already an absolute URL
+            transport.message_endpoint
+        end
     else
-        message_url = message_url * "&session_id=" * transport.session_id
+        # Construct the URL based on the server's expected pattern
+        base_url = replace(transport.url, r"/sse/?$" => "")
+        joinpath(base_url, "messages/") * "?sessionId=" * transport.session_id
     end
+    @show message_url
     
+    @info "Sending message to: $message_url"
     try
-        HTTP.post(message_url, 
+        response = HTTP.post(message_url, 
                 ["Content-Type" => "application/json"], 
                 message)
-    catch ew
+        @debug "POST response: $(String(response.body)) ($(response.status))"
+    catch e
         @error "Error sending message to SSE server" exception=e url=message_url
     end
 end
 
 function close_transport(transport::SSETransport)
+    transport.session_id = nothing
     if transport.task !== nothing && !istaskdone(transport.task)
-        try schedule(transport.task, InterruptException(); error=true) catch end
+        try 
+            schedule(transport.task, InterruptException(); error=true)
+            sleep(0.1)
+        catch e
+            @debug "Error while interrupting SSE task: $e"
+        end
     end
+    
     if transport.client !== nothing
-        try close(transport.client) catch end
+        try 
+            close(transport.client)
+            transport.client = nothing
+        catch e
+            @debug "Error while closing SSE client: $e"
+        end
+    end
+    
+    while isready(transport.buffer)
+        try take!(transport.buffer) catch end
     end
 end
 

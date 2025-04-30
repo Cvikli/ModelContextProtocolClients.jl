@@ -82,7 +82,7 @@ function MCPClient(url::String, transport_type::Symbol;
         message = read_message(transport)
         message === nothing && sleep(0.1)  # Avoid busy waiting
         message === nothing && continue
-        handle_server_output(client, message, stdout_handler)
+        handle_server_output(client, message, stdout_handler, log_level)
     end
     
     # Wait for connection to be established (up to 5 seconds)
@@ -137,8 +137,8 @@ function MCPClient(path::String;
                     log_level=log_level)
 end
 
-function handle_server_output(client::MCPClient, line::String, stdout_handler::Function)
-	stdout_handler(line)
+function handle_server_output(client::MCPClient, line::String, stdout_handler::Function, log_level::Symbol=:info)
+	log_level == :debug && stdout_handler(line)
 	
 	client.buffer *= line
 	try
@@ -155,17 +155,21 @@ function handle_server_output(client::MCPClient, line::String, stdout_handler::F
 			push!(client.notifications, response)
             if haskey(response, "method") && response["method"] == "notifications/cancelled"
 				@warn "Request cancelled: $(get(response["params"], "reason", "Unknown reason"))"
+                close(client)
 			else
 				# Log other notifications at info level
-                @warn "notification: $response"
+                @info "Notification received: $(response)"
 			end
 			client.buffer = ""
 		else
 			@warn "unknown message: $response"
 		end
-	catch
+	catch e
 		# Reset buffer if it gets too large
-		length(client.buffer) > 10000 && (client.buffer = "")
+        if length(client.buffer) > 10000
+            @warn "Buffer too large, resetting. Error: $e"
+            client.buffer = ""
+        end
 	end
 end
 
