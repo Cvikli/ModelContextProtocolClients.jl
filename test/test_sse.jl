@@ -1,4 +1,4 @@
-using MCP
+using MCPClients
 
 # Create a collector
 collector = MCPClientCollector()

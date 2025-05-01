@@ -22,7 +22,7 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
                   stdout_handler::Function=(str)->println("SERVER: $str"),
                   auto_initialize::Bool=true,
                   client_name::String="julia-mcp-client",
-                  client_version::String=MCPclient_VERSION,
+                  client_version::String=MCPClients_VERSION,
                   setup_command::Union{String, Cmd, Nothing}=nothing,
                   log_level::Symbol=:info)
     # Create transport layer with process handling
@@ -58,7 +58,7 @@ function MCPClient(url::String, transport_type::Symbol;
                   stdout_handler::Function=(str)->println("SERVER: $str"),
                   auto_initialize::Bool=true,
                   client_name::String="julia-mcp-client",
-                  client_version::String=MCPclient_VERSION,
+                  client_version::String=MCPClients_VERSION,
                   log_level::Symbol=:info)
     
     transport = if transport_type == :websocket
@@ -113,11 +113,15 @@ function MCPClient(path::String;
                   stdout_handler::Function=(str)->nothing,
                   auto_initialize::Bool=true,
                   client_name::String="julia-mcp-client",
-                  client_version::String=MCPclient_VERSION,
+                  client_version::String=MCPClients_VERSION,
                   setup_command::Union{String, Cmd, Nothing}=nothing,
                   log_level::Symbol=:info)
-    !isfile(path) && error("Server script not found: $path")
-    command = if endswith(path, ".py")
+    # if (true)
+    #     @info "Running setup command as we don't see the server script: $(setup_command)"
+    #     run(setup_command)
+    # end
+    # !isfile(path) && error("Server script not found: $path")
+    executer = if endswith(path, ".py")
         "python3"
     elseif endswith(path, ".js")
         "node"
@@ -125,7 +129,7 @@ function MCPClient(path::String;
         error("Server script must be a .py or .js file: $path")
     end
 
-    return MCPClient(command, [path]; 
+    return MCPClient(executer, [path]; 
                     env=env, 
                     stdout_handler=stdout_handler, 
                     auto_initialize=auto_initialize,
@@ -222,7 +226,7 @@ end
 function initialize(client::MCPClient; 
                    protocol_version::String="0.1.0", 
                    client_name::String="julia-mcp-client", 
-                   client_version::String=MCPclient_VERSION, 
+                   client_version::String=MCPClients_VERSION, 
                    capabilities::Dict=Dict())
     params = Dict(
         "protocolVersion" => protocol_version,

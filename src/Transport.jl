@@ -21,18 +21,18 @@ function StdioTransport(command::Union{Cmd, String}, args::Vector{String}=String
     
     try
         process = env === nothing ?
-            open(pipeline(cmd, stderr=stdout), "r+") :
-            open(pipeline(setenv(cmd, env), stderr=stdout), "r+")
+            Base.open(pipeline(cmd, stderr=stdout), "r+") :
+            Base.open(pipeline(setenv(cmd, env), stderr=stdout), "r+")
     catch e
-        @warn "The run command failed, and we cannot run the setup_command as it wasn't provided, so we give up"
         if setup_command !== nothing
             @info "Initial process failed, we fallback to run the setup command"
-            install_cmd = setup_command isa Cmd ? setup_command : `sh -c $setup_command`
+            install_cmd = setup_command isa Cmd ? setup_command : `$setup_command`
             run(install_cmd)
             # Retry process creation after setup
+            @show cmd
             process = env === nothing ?
-                open(pipeline(cmd, stderr=stdout), "r+") :
-                open(pipeline(setenv(cmd, env), stderr=stdout), "r+")
+                Base.open(pipeline(cmd, stderr=stdout), "r+") :
+                Base.open(pipeline(setenv(cmd, env), stderr=stdout), "r+")
         else
             @info "The run command failed, and we cannot run the setup_command as it wasn't provided, so we give up"
             rethrow(e)

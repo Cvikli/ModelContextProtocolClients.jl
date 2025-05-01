@@ -10,7 +10,7 @@ function add_server(collector::MCPClientCollector, server_id::String,
                    stdout_handler::Function=(str)->println("SERVER: $str"),
                    auto_initialize::Bool=true,
                    client_name::String="julia-mcp-client",
-                   client_version::String=MCPclient_VERSION,
+                   client_version::String=MCPClients_VERSION,
                    setup_command::Union{String, Cmd, Nothing}=nothing)
     collector.servers[server_id] = MCPClient(path; 
                                            env=env, 
@@ -27,7 +27,7 @@ function add_server(collector::MCPClientCollector, server_id::String,
                    stdout_handler::Function=(str)->println("SERVER: $str"),
                    auto_initialize::Bool=true,
                    client_name::String="julia-mcp-client",
-                   client_version::String=MCPclient_VERSION,
+                   client_version::String=MCPClients_VERSION,
                    setup_command::Union{String, Cmd, Nothing}=nothing)
     collector.servers[server_id] = MCPClient(command, args; 
                                            env=env, 
@@ -44,7 +44,7 @@ function add_server(collector::MCPClientCollector, server_id::String,
                    stdout_handler::Function=(str)->println("SERVER: $str"),
                    auto_initialize::Bool=true,
                    client_name::String="julia-mcp-client",
-                   client_version::String=MCPclient.MCP_VERSION,
+                   client_version::String=MCPClients_VERSION,
                    log_level::Symbol=:info)
     collector.servers[server_id] = MCPClient(url, transport_type; 
                                            stdout_handler=stdout_handler,
@@ -72,7 +72,7 @@ end
 function load_mcp_servers_config(collector::MCPClientCollector, config_path::String;
                                 auto_initialize::Bool=true,
                                 client_name::String="julia-mcp-client",
-                                client_version::String=MCPclient_VERSION,
+                                client_version::String=MCPClients_VERSION,
                                 log_level::Symbol=:info)
 	config = JSON.parse(read(config_path, String))
 	
@@ -140,7 +140,7 @@ function explore_mcp_servers_in_directory(collector::MCPClientCollector, directo
                               auto_initialize::Bool=true,
                               stdout_handler::Function=(str)->println("SERVER: $str"),
                               client_name::String="julia-mcp-client",
-                              client_version::String=MCPclient_VERSION,
+                              client_version::String=MCPClients_VERSION,
                               log_level::Symbol=:info)
     !isdir(directory) && error("Directory not found: $directory")
 

@@ -1,19 +1,38 @@
+using MCPClients
 
-add_server(collector, "puppeteer", "mcp/servers/src/puppeteer/dist/index.js")
+!isdir("mcp/servers") && run(`git clone https://github.com/modelcontextprotocol/servers.git mcp/servers`)
 
-# First get the tools list to confirm we're connected
+# Create a server collector
+collector = MCPClientCollector()
+
+# Add a Puppeteer server
+add_server(collector, "puppeteer", "mcp/servers/src/puppeteer/dist/index.js", setup_command=`bash -c "cd mcp/servers/src/puppeteer && npm install && npm run build"`)
+
+# Get available tools
 tools = list_tools(collector, "puppeteer")
-println("Available puppeteer tools: ", [tool["name"] for tool in tools])
+println([tool["name"] for tool in tools])
 
-# Navigate to a website with sandbox disabled
-nav_response = call_tool(collector, "puppeteer", "puppeteer_navigate", Dict(
+# Navigate to a website
+response = call_tool(collector, "puppeteer", "puppeteer_navigate", Dict(
     "url" => "https://example.com",
     "allowDangerous" => true,
-    "launchOptions" => Dict(
-        "headless" => false,
-        "args" => ["--no-sandbox", "--disable-setuid-sandbox"]
-    )
+    "launchOptions" => Dict("headless" => false)
 ))
+
+# Click elements
+call_tool(collector, "puppeteer", "puppeteer_click", Dict(
+    "selector" => "a:nth-of-type(2)"  # Click the second link
+))
+
+# Navigate to a website with sandbox disabled
+# nav_response = call_tool(collector, "puppeteer", "puppeteer_navigate", Dict(
+#     "url" => "https://example.com",
+#     "allowDangerous" => true,
+#     "launchOptions" => Dict(
+#         "headless" => false,
+#         "args" => ["--no-sandbox", "--disable-setuid-sandbox"]
+#     )
+# ))
 println("Navigation result: ", nav_response)
 
 # Take a screenshot

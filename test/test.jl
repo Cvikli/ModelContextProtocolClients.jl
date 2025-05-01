@@ -1,4 +1,4 @@
-using MCPclient
+using MCPClients
 
 mkpath("mcp")  # Create mcp directory if it doesn't exist
 
@@ -96,7 +96,7 @@ send_request(client, """
 #%%
 
 #%%
-using MCP: send_request
+using MCPClients: send_request
 send_request(collector.servers["git"], """
 {
   "jsonrpc": "2.0",

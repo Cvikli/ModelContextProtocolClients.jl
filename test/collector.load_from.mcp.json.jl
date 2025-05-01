@@ -1,9 +1,9 @@
-using MCP
+using MCPClients
 collector = MCPClientCollector()
 load_mcp_servers_config(collector, "test/mcp1.json")
 
 #%%
-using MCP: list_clients
+using MCPClients: list_clients
 list_clients(collector)
 
 #%%
