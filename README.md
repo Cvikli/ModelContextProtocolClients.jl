@@ -69,32 +69,6 @@ call_tool(collector, "puppeteer", "puppeteer_click", Dict(
 disconnect_all(collector)
 ```
 
-
-## Auto-Discovery Example
-
-```julia
-using ModelContextProtocolClient
-
-# Create a server collector
-collector = MCPClientCollector()
-
-# Discover MCP servers in a directory
-explore_mcp_servers(collector, "./mcp", 
-                   exclude_patterns=[".git", "venv"],
-                   log_level=:info)
-
-# List all discovered tools
-for (server_id, tool_name, info) in get_all_tools(collector)
-    println("$server_id: $tool_name")
-end
-
-# Use a discovered tool
-call_tool(collector, "discovered_server_id", "tool_name", Dict("arg1" => "value1"))
-
-# Clean up
-disconnect_all(collector)
-```
-
 ## Loading every MCP Servers from root folder
 
 MCP.jl can automatically discover and load MCP servers from a directory structure. It supports both Node.js and Python projects, including those with pyproject.toml configuration.
@@ -127,7 +101,7 @@ The `explore_mcp_servers_in_directory` function will:
 
 ## Loading from Configuration
 
-You can also load servers from a configuration file that includes WebSocket and SSE servers:
+You can also load servers from a configuration file that include STDIO or SSE servers:
 
 ```julia
 using ModelContextProtocolClient
@@ -150,10 +124,6 @@ Example mcp.json with different transport types:
         "env": {
           "API_KEY": "your-api-key"
         }
-      },
-      "websocket_server": {
-        "url": "ws://localhost:8080/ws",
-        "transport": "websocket"
       },
       "sse_server": {
         "url": "http://localhost:8080/sse",
@@ -179,8 +149,6 @@ ModelContextProtocolClient.jl has been tested with:
 - **https://mcp.bitte.ai/sse**: Blockchain empowered by agents
 
 ## API Reference
-
-### Core Functions
 
 - `MCPClientCollector()` - Create a new collector
 - `add_server(collector, id, path, [env]; setup_command=nothing)` - Connect to a local MCP server
