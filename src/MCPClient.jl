@@ -22,7 +22,7 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
                   stdout_handler::Function=(str)->println("SERVER: $str"),
                   auto_initialize::Bool=true,
                   client_name::String="julia-mcp-client",
-                  client_version::String=MCPClients_VERSION,
+                  client_version::String=MCPClient_VERSION,
                   setup_command::Union{String, Cmd, Nothing}=nothing,
                   log_level::Symbol=:info)
     # Create transport layer with process handling
@@ -58,7 +58,7 @@ function MCPClient(url::String, transport_type::Symbol;
                   stdout_handler::Function=(str)->println("SERVER: $str"),
                   auto_initialize::Bool=true,
                   client_name::String="julia-mcp-client",
-                  client_version::String=MCPClients_VERSION,
+                  client_version::String=MCPClient_VERSION,
                   log_level::Symbol=:info)
     
     transport = if transport_type == :websocket
@@ -113,7 +113,7 @@ function MCPClient(path::String;
                   stdout_handler::Function=(str)->nothing,
                   auto_initialize::Bool=true,
                   client_name::String="julia-mcp-client",
-                  client_version::String=MCPClients_VERSION,
+                  client_version::String=MCPClient_VERSION,
                   setup_command::Union{String, Cmd, Nothing}=nothing,
                   log_level::Symbol=:info)
     # if (true)
@@ -226,7 +226,7 @@ end
 function initialize(client::MCPClient; 
                    protocol_version::String="0.1.0", 
                    client_name::String="julia-mcp-client", 
-                   client_version::String=MCPClients_VERSION, 
+                   client_version::String=MCPClient_VERSION, 
                    capabilities::Dict=Dict())
     params = Dict(
         "protocolVersion" => protocol_version,

@@ -1,5 +1,5 @@
-using MCPClients
-using MCPClients: initialize, send_request
+using ModelContextProtocolClient
+using ModelContextProtocolClient: initialize, send_request
 
 # Create a client for the fetch server
 client = MCPClient(`python3 -m mcp_server_fetch`)

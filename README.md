@@ -1,4 +1,4 @@
-# MCPClients.jl
+# ModelContextProtocolClient.jl
 
 A Julia client for the Model Context Protocol (MCP) that allows communication with various MCP servers. This package simplifies integrating AI tools into your Julia applications through a consistent interface.
 
@@ -25,13 +25,13 @@ MCPClientCollector is a list of the `MCPClient`s. Simple dict wrap that manage t
 
 ```julia
 using Pkg
-Pkg.add("MCPClients")
+Pkg.add("ModelContextProtocolClient")
 ```
 
 ## SSE Example
 
 ```julia
-using MCPClients
+using ModelContextProtocolClient
 client = MCPClient("https://mcp.bitte.ai/sse", :sse)
 tools = list_tools(client)
 println(tools)
@@ -73,7 +73,7 @@ disconnect_all(collector)
 ## Auto-Discovery Example
 
 ```julia
-using MCPClients
+using ModelContextProtocolClient
 
 # Create a server collector
 collector = MCPClientCollector()
@@ -100,7 +100,7 @@ disconnect_all(collector)
 MCP.jl can automatically discover and load MCP servers from a directory structure. It supports both Node.js and Python projects, including those with pyproject.toml configuration.
 
 ```julia
-using MCPClients
+using ModelContextProtocolClient
 
 # Create a collector
 collector = MCPClientCollector()
@@ -109,7 +109,7 @@ collector = MCPClientCollector()
 explore_mcp_servers_in_directory(collector, "mcp/")
 
 # List all loaded clients
-using MCPClients: list_clients
+using ModelContextProtocolClient: list_clients
 list_clients(collector)
 
 # Now you can use any of the discovered tools
@@ -130,7 +130,7 @@ The `explore_mcp_servers_in_directory` function will:
 You can also load servers from a configuration file that includes WebSocket and SSE servers:
 
 ```julia
-using MCPClients
+using ModelContextProtocolClient
 
 # Create a collector
 collector = MCPClientCollector()
@@ -166,9 +166,9 @@ Example mcp.json with different transport types:
 
 ## Tested Servers
 
-The MCPClients.jl should work with most of the servers that is in nodejs or python
+The ModelContextProtocolClient.jl should work with most of the servers that is in nodejs or python
 
-MCPClients.jl has been tested with:
+ModelContextProtocolClient.jl has been tested with:
 
 - **puppeteer**: Browser automation
 - **time**: Timezone conversion services
@@ -203,9 +203,9 @@ Check the `test` directory for complete examples:
 
 ## ROADMAP
 
-- [x] NodeJS MCP server run by the MCPClients
-- [x] Python MCP server run by the MCPClients
-- [x] Other language MCP server to be run by MCPClients (you only need to setup it and then send the "run command")
+- [x] NodeJS MCP server run by the ModelContextProtocolClient
+- [x] Python MCP server run by the ModelContextProtocolClient
+- [x] Other language MCP server to be run by ModelContextProtocolClient (you only need to setup it and then send the "run command")
 - [x] MCP server exploration per folder
 - [x] Initialization of the server could be automatized like installation and so on
 - [ ] configuration deduction (So we should be able to know what are the required environment variables nd list them somehow) (I don't know where does this know but sounds like hardcoded...? https://claudedesktopconfiggenerator.com/)

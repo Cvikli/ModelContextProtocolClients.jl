@@ -1,4 +1,4 @@
-module MCPClients
+module ModelContextProtocolClient
 
 using JSON
 using HTTP
@@ -7,7 +7,7 @@ using WebSockets: WebSocket, open, close
 using WebSockets
 
 # Get the package version from Project.toml
-const MCPClients_VERSION = "0.8.0"
+const MCPClient_VERSION = "0.8.0"
 
 
 include("Transport.jl")
@@ -20,4 +20,4 @@ export load_mcp_servers_config, send_request, explore_mcp_servers_in_directory
 export read_message, write_message, close_transport
 
 
-end # module MCPClients
+end # module ModelContextProtocolClient

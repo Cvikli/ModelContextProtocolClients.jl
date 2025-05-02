@@ -1,9 +1,9 @@
-using MCPClients
+using ModelContextProtocolClient
 collector = MCPClientCollector()
 load_mcp_servers_config(collector, "test/mcp1.json")
 
 #%%
-using MCPClients: list_clients
+using ModelContextProtocolClient: list_clients
 list_clients(collector)
 
 #%%

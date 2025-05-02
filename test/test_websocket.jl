@@ -1,4 +1,4 @@
-using MCPClients
+using ModelContextProtocolClient
 
 # Create a collector
 collector = MCPClientCollector()

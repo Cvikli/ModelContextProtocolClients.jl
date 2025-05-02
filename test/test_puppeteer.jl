@@ -1,4 +1,4 @@
-using MCPClients
+using ModelContextProtocolClient
 
 !isdir("mcp/servers") && run(`git clone https://github.com/modelcontextprotocol/servers.git mcp/servers`)
 

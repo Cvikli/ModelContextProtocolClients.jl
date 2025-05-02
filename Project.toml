@@ -1,5 +1,5 @@
-name = "MCPClients"
-uuid = "41343802-41c3-41c5-a97d-4fef993ac349"
+name = "ModelContextProtocolClient"
+uuid = "dc971b79-920b-46e3-beb8-dc8bd2e1a56f"
 authors = ["Cvikli <havlikmarcell@gmail.com>"]
 version = "0.8.0"
 
