@@ -3,42 +3,41 @@
 end
 list_clients(collector::MCPClientCollector) = collect(keys(collector.servers))
 
-# Add server with a path
-function add_server(collector::MCPClientCollector, server_id::String,  
-                    transport_type::Symbol=:stdio; 
-                    path::String,
-                    env::Union{Dict{String, String}, Nothing}=nothing, 
+# Unified add_server function that handles all cases based on provided kwargs
+function add_server(collector::MCPClientCollector, server_id::String;
+                    # Common parameters
+                    env::Union{Dict{String, String}, Nothing}=nothing,
                     stdout_handler::Function=(str)->println("SERVER: $str"),
                     auto_initialize::Bool=true,
                     client_name::String="julia-mcp-client",
                     client_version::String=MCPClient_VERSION,
                     setup_command::Union{String, Cmd, Nothing}=nothing,
-                    log_level::Symbol=:info)
-  collector.servers[server_id] = MCPClient(path; env, transport_type,stdout_handler,auto_initialize,client_name,client_version,setup_command,log_level)
-end
-
-function add_server(collector::MCPClientCollector, server_id::String, 
-                    ;command::String, args::Vector{String}, 
-                    env::Union{Dict{String, String}, Nothing}=nothing, 
-                   stdout_handler::Function=(str)->println("SERVER: $str"),
-                   auto_initialize::Bool=true,
-                   client_name::String="julia-mcp-client",
-                   client_version::String=MCPClient_VERSION,
-                   setup_command::Union{String, Cmd, Nothing}=nothing,
-                   log_level::Symbol=:info)
-    collector.servers[server_id] = MCPClient(command, args; env, stdout_handler,auto_initialize,client_name,client_version,setup_command)
-end
-
-# Add server with a URL (WebSocket or SSE)
-function add_server(collector::MCPClientCollector, server_id::String, 
-                   ; url::String, transport_type::Symbol,
-                   stdout_handler::Function=(str)->println("SERVER: $str"),
-                   auto_initialize::Bool=true,
-                   client_name::String="julia-mcp-client",
-                   client_version::String=MCPClient_VERSION,
-                   log_level::Symbol=:info,
-                   setup_command::Union{String, Cmd, Nothing}=nothing)
-    collector.servers[server_id] = MCPClient(url, transport_type; stdout_handler,auto_initialize,client_name,client_version,log_level,setup_command)
+                    log_level::Symbol=:info,
+                    # Path-based parameters
+                    path::Union{String, Nothing}=nothing,
+                    transport_type::Symbol=:stdio,
+                    # Command-based parameters
+                    command::Union{String, Nothing}=nothing,
+                    args::Vector{String}=String[],
+                    # URL-based parameters
+                    url::Union{String, Nothing}=nothing)
+    
+    return collector.servers[server_id] = if url !== nothing # URL-based client (WebSocket or SSE)
+        MCPClient(url, transport_type; stdout_handler, 
+                  auto_initialize, client_name, 
+                  client_version, setup_command, log_level)
+    elseif path !== nothing # Path-based client
+        MCPClient(path; 
+                  env, transport_type, stdout_handler,
+                  auto_initialize, client_name, 
+                  client_version, setup_command, log_level)
+    elseif command !== nothing # Command-based client
+        MCPClient(command, args; 
+                  env, transport_type, stdout_handler, 
+                  auto_initialize, client_name, 
+                  client_version, setup_command, log_level)
+    end
+    error("Invalid parameters: must provide either 'url', 'path', or 'command'")
 end
 
 remove_server(collector::MCPClientCollector, server_id::String) = haskey(collector.servers, server_id) && (close(collector.servers[server_id]); delete!(collector.servers, server_id))

@@ -8,53 +8,55 @@ export read_message, write_message, close_transport
 abstract type TransportLayer end
 
 # Stdio Transport
-struct StdioTransport <: TransportLayer
-    process::Base.Process
+mutable struct StdioTransport <: TransportLayer
+    process::Union{Base.Process, Nothing}
+    command::Union{Cmd, Nothing}
+    setup_command::Union{String, Cmd, Nothing}
+    env::Union{Dict{String,String}, Nothing}
 end
 
-function StdioTransport(command::Union{Cmd, String}, args::Vector{String}=String[]; 
-                        env::Union{Dict{String,String}, Nothing}=nothing,
-                        setup_command::Union{String, Cmd, Nothing}=nothing)
-    # Create command
-    cmd = command isa Cmd ? command : `$command $args`
-    process = nothing
-    
-    try
-        process = env === nothing ?
-            Base.open(pipeline(cmd, stderr=stdout), "r+") :
-            Base.open(pipeline(setenv(cmd, env), stderr=stdout), "r+")
-    catch e
-        if setup_command !== nothing
-            @info "Initial process failed, we fallback to run the setup command"
-            install_cmd = setup_command isa Cmd ? setup_command : `$setup_command`
-            run(install_cmd)
-            # Retry process creation after setup
-            @show cmd
-            process = env === nothing ?
-                Base.open(pipeline(cmd, stderr=stdout), "r+") :
-                Base.open(pipeline(setenv(cmd, env), stderr=stdout), "r+")
-        else
-            @info "The run command failed, and we cannot run the setup_command as it wasn't provided, so we give up"
-            rethrow(e)
-        end
-    end
-    
-    return StdioTransport(process)
+function StdioTransport(command::Union{Cmd, String}, args::Vector{String}=String[], env::Union{Dict{String,String}, Nothing}=nothing, setup_command::Union{String, Cmd, Nothing}=nothing)
+    return StdioTransport(nothing, command isa Cmd ? command : `$command $args`, setup_command, env)
+end
+
+function open_transport(transport::StdioTransport)
+    transport.process = transport.env === nothing ?
+        Base.open(pipeline(transport.command, stderr=stdout), "r+") :
+        Base.open(pipeline(setenv(transport.command, transport.env), stderr=stdout), "r+")
+    return transport
 end
 
 is_connected(transport::StdioTransport)     = true
 function read_message(transport::StdioTransport)
-    !process_running(transport.process) && return nothing
-    !eof(transport.process) ? readline(transport.process) : nothing
+    return !process_running(transport.process) && !eof(transport.process) ? readline(transport.process) : nothing
 end
 
+function check_process_exited(transport)
+    sleep(0.4)
+    if process_exited(transport.process)
+        @error "Process failed to start. Check for missing modules or bad command."
+        if transport.setup_command !== nothing
+            @info "Initial process failed, we fallback to run the setup command"
+            install_cmd = transport.setup_command isa Cmd ? transport.setup_command : `$transport.setup_command`
+            run(install_cmd)
+            # Retry process creation after setup
+            env = transport.env
+            process = env === nothing ?
+                Base.open(pipeline(transport.command, stderr=stdout), "r+") :
+                Base.open(pipeline(setenv(transport.command, env), stderr=stdout), "r+")
+        else
+            @info "We couldn't start the process and the fallback method to the setup_command isn't availabel as the setup_command wasn't provided, so we give up"
+            rethrow(e)
+        end
+    end
+end
 function write_message(transport::StdioTransport, message::String)
     write(transport.process, message * "\n")
     flush(transport.process)
 end
 
 function close_transport(transport::StdioTransport)
-    try kill(transport.process) catch end
+    try kill(transport.process) catch e; @warn "Error while killing process: $e"; end
 end
 
 function process_running(process::Base.Process)
@@ -80,25 +82,7 @@ end
 function SSETransport(url::String)
     SSETransport(url, nothing, Channel{String}(100), nothing, nothing, nothing, nothing)
 end
-
-# Helper to resolve the message endpoint URL (only called once when endpoint is established)
-function resolve_message_endpoint(transport::SSETransport)
-    if transport.message_endpoint !== nothing
-        if startswith(transport.message_endpoint, "/")
-            base_url = replace(transport.url, r"/sse/?.*$" => "")
-            transport.resolved_endpoint = base_url * transport.message_endpoint
-        else
-            transport.resolved_endpoint = transport.message_endpoint
-        end
-    else
-        base_url = replace(transport.url, r"/sse/?$" => "")
-        transport.resolved_endpoint = joinpath(base_url, "messages/") * "?sessionId=" * transport.session_id
-    end
-    @info "Resolved message endpoint: $(transport.resolved_endpoint)"
-end
-
-is_connected(transport::SSETransport)       = transport.session_id !== nothing
-function start_sse_client(transport::SSETransport)
+function open_transport(transport::SSETransport)
     transport.task = @async begin
         HTTP.open("GET", transport.url) do stream
             transport.client = stream
@@ -173,7 +157,26 @@ function start_sse_client(transport::SSETransport)
             end
         end
     end
+    return transport
 end
+is_connected(transport::SSETransport)       = transport.session_id !== nothing
+
+# Helper to resolve the message endpoint URL (only called once when endpoint is established)
+function resolve_message_endpoint(transport::SSETransport)
+    if transport.message_endpoint !== nothing
+        if startswith(transport.message_endpoint, "/")
+            base_url = replace(transport.url, r"/sse/?.*$" => "")
+            transport.resolved_endpoint = base_url * transport.message_endpoint
+        else
+            transport.resolved_endpoint = transport.message_endpoint
+        end
+    else
+        base_url = replace(transport.url, r"/sse/?$" => "")
+        transport.resolved_endpoint = joinpath(base_url, "messages/") * "?sessionId=" * transport.session_id
+    end
+    @info "Resolved message endpoint: $(transport.resolved_endpoint)"
+end
+
 
 # Simple helper function to wait for a condition with timeout
 function wait_for_condition(condition::Function, timeout_seconds::Float64=5.0; message::String="")
@@ -189,7 +192,7 @@ function wait_for_condition(condition::Function, timeout_seconds::Float64=5.0; m
 end
 
 function read_message(transport::SSETransport)
-    is_connected(transport) || (start_sse_client(transport) && wait_for_condition(() -> is_connected(transport), 3.0, message="Failed to establish SSE session within timeout") && @info "SSE session established")
+    is_connected(transport) || (open_transport(transport) && wait_for_condition(() -> is_connected(transport), 3.0, message="Failed to establish SSE session within timeout") && @info "SSE session established")
     
     isready(transport.buffer) && return take!(transport.buffer)
     return nothing
@@ -198,7 +201,7 @@ end
 function write_message(transport::SSETransport, message::String)
     println("CLIENT: $message")
     # SSE is unidirectional, so we need to make a separate HTTP request
-    is_connected(transport) || (start_sse_client(transport) && wait_for_condition(() -> is_connected(transport), 5.0, message="Failed to re-establish SSE session") && @info "SSE session re-established")
+    is_connected(transport) || (open_transport(transport) && wait_for_condition(() -> is_connected(transport), 5.0, message="Failed to re-establish SSE session") && @info "SSE session re-established")
     
     @info "Sending message to: $transport.resolved_endpoint"
     response = HTTP.post(transport.resolved_endpoint, 
@@ -244,9 +247,7 @@ function WebSocketTransport(url::String)
     WebSocketTransport(url, nothing, Channel{String}(100), nothing)
 end
 
-is_connected(transport::WebSocketTransport) = transport.ws !== nothing
-
-function start_websocket_client(transport::WebSocketTransport)
+function open_transport(transport::WebSocketTransport)
     transport.task = @async begin
         try
             open(transport.url) do ws
@@ -260,12 +261,16 @@ function start_websocket_client(transport::WebSocketTransport)
             @error "WebSocket connection error" exception=e
         end
     end
+    return transport
 end
 
+is_connected(transport::WebSocketTransport) = transport.ws !== nothing
+
+
 function read_message(transport::WebSocketTransport)
-    is_connected(transport) || start_websocket_client(transport)
+    is_connected(transport) || open_transport(transport)
+
     isready(transport.buffer) && return take!(transport.buffer)
-    
     return nothing
 end
 
@@ -290,13 +295,13 @@ function create_transport(url::String, transport_type::Symbol;
     env::Union{Dict{String,String}, Nothing}=nothing,
     setup_command::Union{String, Cmd, Nothing}=nothing)
     if transport_type == :websocket
-        return WebSocketTransport(url)
+        return open_transport(WebSocketTransport(url))
     elseif transport_type == :sse
-        return SSETransport(url)
+        return open_transport(SSETransport(url))
     elseif transport_type == :stdio
-        return StdioTransport(url, args; env=env, setup_command=setup_command)
-    else
-        error("Unsupported transport type: $transport_type. Use :websocket, :sse, or :stdio")
+        return open_transport(StdioTransport(url, args, env, setup_command))
     end
+    
+    return error("Unsupported transport type: $transport_type. Use :websocket, :sse, or :stdio")
 end
 

@@ -1,18 +1,13 @@
 
 @kwdef mutable struct MCPClient
-	command::Union{String, Nothing} = nothing
-	path::Union{String, Nothing} = nothing
-	process::Union{Process, Nothing} = nothing
 	transport::Union{TransportLayer, Nothing} = nothing
 	output_task::Union{Task, Nothing} = nothing
-	env::Union{Dict{String,String}, Nothing} = nothing
 	req_id::Int=0
 	tools_by_name::Vector{Dict{String, Any}} = Vector{Dict{String, Any}}()
 	responses::Dict{Int, Dict} = Dict{Int, Dict}()
 	notifications::Vector{Dict} = Vector{Dict}()
 	pending_requests::Dict{Int, Bool} = Dict{Int, Bool}()
 	buffer::String = ""
-	setup_command::Union{String, Cmd, Nothing} = nothing
     log_level::Symbol=:info
 end
 
@@ -22,7 +17,7 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
                   env::Union{Dict{String,String}, Nothing}=nothing, 
                   stdout_handler::Function=(str)->println("SERVER: $str"),
                   auto_initialize::Bool=true,
-                  client_name::String="julia-mcp-client",
+                  client_name::String=JULIC_MCP_CLIENT,
                   client_version::String=MCPClient_VERSION,
                   setup_command::Union{String, Cmd, Nothing}=nothing,
                   log_level::Symbol=:info)
@@ -30,23 +25,14 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
     transport = create_transport(command, transport_type; args, env, setup_command)
 
     # Create client
-    client = MCPClient(
-        command=string(command),
-        path=command isa Cmd ? "" : join(args, " "),
-        process=transport.process,
-        ; transport, env, setup_command, log_level
-    )
+    client = MCPClient(; transport, log_level)
     
     client.output_task = @async while true
         message = read_message(transport)
         message === nothing && break
         handle_server_output(client, message, stdout_handler)
     end
-    
-    # Auto-initialize if requested
-    if auto_initialize
-        initialize(client; client_name, client_version)
-    end
+    auto_initialize && is_connected(transport) && initialize(client; client_name, client_version)
     
     return client
 end
@@ -55,24 +41,22 @@ end
 function MCPClient(url::String, transport_type::Symbol; 
                   stdout_handler::Function=(str)->println("SERVER: $str"),
                   auto_initialize::Bool=true,
-                  client_name::String="julia-mcp-client",
+                  client_name::String=JULIC_MCP_CLIENT,
                   client_version::String=MCPClient_VERSION,
                   log_level::Symbol=:info,
                   setup_command::Union{String, Cmd, Nothing}=nothing)
     
     transport = create_transport(url, transport_type; setup_command)
     
-    # Create client
-    client = MCPClient(
-        transport=transport,
-        log_level=log_level
-        # Don't set path explicitly since it defaults to nothing
-    )
+    
+    client = MCPClient(; transport, log_level)
     
     client.output_task = @async while true
         message = read_message(transport)
-        message === nothing && sleep(0.1)  # Avoid busy waiting
-        message === nothing && continue
+        message === nothing && sleep(0.01)  # Avoid busy waiting
+        message === nothing && sleep(0.04)  # Avoid busy waiting
+        message === nothing && sleep(0.05)  # Avoid busy waiting
+        message === nothing && break
         handle_server_output(client, message, stdout_handler, log_level)
     end
     
@@ -98,17 +82,13 @@ end
 
 function MCPClient(path::String; 
                   env::Union{Dict{String,String}, Nothing}=nothing, 
+                  transport_type::Symbol=:stdio,
                   stdout_handler::Function=(str)->nothing,
                   auto_initialize::Bool=true,
-                  client_name::String="julia-mcp-client",
+                  client_name::String=JULIC_MCP_CLIENT,
                   client_version::String=MCPClient_VERSION,
                   setup_command::Union{String, Cmd, Nothing}=nothing,
                   log_level::Symbol=:info)
-    # if (true)
-    #     @info "Running setup command as we don't see the server script: $(setup_command)"
-    #     run(setup_command)
-    # end
-    # !isfile(path) && error("Server script not found: $path")
     executer = if endswith(path, ".py")
         "python3"
     elseif endswith(path, ".js")
@@ -117,8 +97,7 @@ function MCPClient(path::String;
         error("Server script must be a .py or .js file: $path")
     end
 
-    return MCPClient(executer, [path]; env, stdout_handler, auto_initialize,client_name,client_version,setup_command,log_level,
-                    transport_type=:stdio)
+    return MCPClient(executer, [path]; env, stdout_handler, auto_initialize, client_name, client_version, setup_command, log_level, transport_type)
 end
 
 function handle_server_output(client::MCPClient, line::String, stdout_handler::Function, log_level::Symbol=:info)
@@ -229,18 +208,19 @@ end
 
 function initialize(client::MCPClient; 
                    protocol_version::String="0.1.0", 
-                   client_name::String="julia-mcp-client", 
+                   client_name::String=JULIC_MCP_CLIENT, 
                    client_version::String=MCPClient_VERSION, 
                    capabilities::Dict=Dict())
     params = Dict(
         "protocolVersion" => protocol_version,
         "clientInfo" => Dict(
-            "name" => client_name,
+            "name"    => client_name,
             "version" => client_version
         ),
         "capabilities" => capabilities
     )
-    
+    check_process_exited(client.transport)
+
     response = send_request(client, method="initialize", params=params)
     
     # Send initialized notification after successful initialization
@@ -262,7 +242,7 @@ list_resources(client::MCPClient)=@assert "unimplemented"
 call_tool(client::MCPClient, raw_request::String)                = send_request(client, raw_request)
 call_tool(client::MCPClient, tool_name::String, arguments::Dict) = send_request(client, method="tools/call", params=Dict("name" => tool_name, "arguments" => arguments))
 
-function send_request(client::MCPClient; method::String, params::Dict=Dict())
+function send_request(client::MCPClient; method::String, params::Dict=Dict()) ## TODO can we leave out the params if empty?
 	req_id = (client.req_id += 1)
 	
 	client.pending_requests[req_id] = true
