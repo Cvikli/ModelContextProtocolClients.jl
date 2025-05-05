@@ -34,8 +34,9 @@ function add_server(collector::MCPClientCollector, server_id::String,
                    auto_initialize::Bool=true,
                    client_name::String="julia-mcp-client",
                    client_version::String=MCPClient_VERSION,
-                   log_level::Symbol=:info)
-    collector.servers[server_id] = MCPClient(url, transport_type; stdout_handler,auto_initialize,client_name,client_version,log_level)
+                   log_level::Symbol=:info,
+                   setup_command::Union{String, Cmd, Nothing}=nothing)
+    collector.servers[server_id] = MCPClient(url, transport_type; stdout_handler,auto_initialize,client_name,client_version,log_level,setup_command)
 end
 
 remove_server(collector::MCPClientCollector, server_id::String) = haskey(collector.servers, server_id) && (close(collector.servers[server_id]); delete!(collector.servers, server_id))
@@ -59,7 +60,8 @@ function load_mcp_servers_config(collector::MCPClientCollector, config_path::Str
                                 auto_initialize::Bool=true,
                                 client_name::String="julia-mcp-client",
                                 client_version::String=MCPClient_VERSION,
-                                log_level::Symbol=:info)
+                                log_level::Symbol=:info,
+                                setup_command::Union{String, Cmd, Nothing}=nothing)
 	config = JSON.parse(read(config_path, String))
 	
 	# Check if we have the "mcp" key structure
@@ -71,7 +73,7 @@ function load_mcp_servers_config(collector::MCPClientCollector, config_path::Str
 		error("Invalid MCP server configuration format. Expected 'mcp.servers' or 'mcpServers' key in the config file.")
 	end
 
-	cd(workdir_prefix) do 
+	cd(isempty(workdir_prefix) ? "." : workdir_prefix) do 
 		for (server_id, server_config) in servers_config
 
       # Check if this is a URL-based server (WebSocket or SSE)
@@ -87,7 +89,7 @@ function load_mcp_servers_config(collector::MCPClientCollector, config_path::Str
           :websocket  # Default to WebSocket
         end
         
-        add_server(collector, server_id, url, transport_type; auto_initialize, client_name, client_version)
+        add_server(collector, server_id, url, transport_type; auto_initialize, client_name, client_version, setup_command, log_level)
       else
         # Clone from gitUrl if specified and directory doesn't exist
         dir = joinpath(workdir_prefix, server_id)
@@ -102,8 +104,7 @@ function load_mcp_servers_config(collector::MCPClientCollector, config_path::Str
         env_dict = env === nothing ? nothing : Dict{String,String}(k => string(v) for (k,v) in env)
         
         # Add server using the command and args directly
-        add_server(collector, server_id, command, args; auto_initialize, client_name, client_version, setup_command,
-              env=env_dict, )
+        add_server(collector, server_id, command, args; auto_initialize, client_name, client_version, setup_command, log_level, env=env_dict)
       end
     end
 	end

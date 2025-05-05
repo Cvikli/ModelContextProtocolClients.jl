@@ -57,9 +57,10 @@ function MCPClient(url::String, transport_type::Symbol;
                   auto_initialize::Bool=true,
                   client_name::String="julia-mcp-client",
                   client_version::String=MCPClient_VERSION,
-                  log_level::Symbol=:info)
+                  log_level::Symbol=:info,
+                  setup_command::Union{String, Cmd, Nothing}=nothing)
     
-    transport = create_transport(url, transport_type)
+    transport = create_transport(url, transport_type; setup_command)
     
     # Create client
     client = MCPClient(
@@ -207,6 +208,28 @@ function list_tools(client::MCPClient)
         client.tools_by_name = [tool for tool in response["result"]["tools"]]
     end
 	return client.tools_by_name
+end
+function print_tools(tools_array)
+    for (i, tool) in enumerate(tools_array)
+        name = tool["name"]
+        desc = tool["description"]
+        schema = tool["inputSchema"]
+        props = schema["properties"]
+        required = schema["required"]
+        
+        println("\n$name: $desc")
+        println("  Required params: $(join(required, ", "))")
+        
+        println("  Parameters:")
+        for (param, details) in props
+            type_str = get(details, "type", "unknown")
+            param_desc = get(details, "description", "")
+            req_str = param in required ? "[REQUIRED]" : "[optional]"
+            println("    • $param ($type_str) $req_str: $param_desc")
+        end
+        
+        i < length(tools_array) && println("---")
+    end
 end
 
 function initialize(client::MCPClient; 
