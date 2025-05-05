@@ -1,5 +1,6 @@
-
-add_server(collector, "google-maps", "mcp/servers/src/google-maps/dist/index.js", Dict("GOOGLE_MAPS_API_KEY" => ENV["GOOGLE_MAPS_API_KEY"]))
+using ModelContextProtocolClients
+collector = MCPClientCollector()
+add_server(collector, "google-maps", path="mcp/servers/src/google-maps/dist/index.js", env=Dict("GOOGLE_MAPS_API_KEY" => ENV["GOOGLE_MAPS_API_KEY"]))
 
 tools = list_tools(collector, "google-maps")
 @show tools

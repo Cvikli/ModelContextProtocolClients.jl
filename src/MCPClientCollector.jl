@@ -4,32 +4,34 @@ end
 list_clients(collector::MCPClientCollector) = collect(keys(collector.servers))
 
 # Add server with a path
+function add_server(collector::MCPClientCollector, server_id::String,  
+                    transport_type::Symbol=:stdio; 
+                    path::String,
+                    env::Union{Dict{String, String}, Nothing}=nothing, 
+                    stdout_handler::Function=(str)->println("SERVER: $str"),
+                    auto_initialize::Bool=true,
+                    client_name::String="julia-mcp-client",
+                    client_version::String=MCPClient_VERSION,
+                    setup_command::Union{String, Cmd, Nothing}=nothing,
+                    log_level::Symbol=:info)
+  collector.servers[server_id] = MCPClient(path; env, transport_type,stdout_handler,auto_initialize,client_name,client_version,setup_command,log_level)
+end
+
 function add_server(collector::MCPClientCollector, server_id::String, 
-  path::String, transport_type::Symbol=:stdio; 
-  env::Union{Dict{String, String}, Nothing}=nothing, 
+                    ;command::String, args::Vector{String}, 
+                    env::Union{Dict{String, String}, Nothing}=nothing, 
                    stdout_handler::Function=(str)->println("SERVER: $str"),
                    auto_initialize::Bool=true,
                    client_name::String="julia-mcp-client",
                    client_version::String=MCPClient_VERSION,
                    setup_command::Union{String, Cmd, Nothing}=nothing,
                    log_level::Symbol=:info)
-  collector.servers[server_id] = MCPClient(path; env, transport_type,stdout_handler,auto_initialize,client_name,client_version,setup_command,log_level)
-end
-
-function add_server(collector::MCPClientCollector, server_id::String, 
-  command::String, args::Vector{String}; 
-  env::Union{Dict{String, String}, Nothing}=nothing, 
-                   stdout_handler::Function=(str)->println("SERVER: $str"),
-                   auto_initialize::Bool=true,
-                   client_name::String="julia-mcp-client",
-                   client_version::String=MCPClient_VERSION,
-                   setup_command::Union{String, Cmd, Nothing}=nothing)
     collector.servers[server_id] = MCPClient(command, args; env, stdout_handler,auto_initialize,client_name,client_version,setup_command)
 end
 
 # Add server with a URL (WebSocket or SSE)
 function add_server(collector::MCPClientCollector, server_id::String, 
-  url::String, transport_type::Symbol; 
+                   ; url::String, transport_type::Symbol,
                    stdout_handler::Function=(str)->println("SERVER: $str"),
                    auto_initialize::Bool=true,
                    client_name::String="julia-mcp-client",
@@ -86,7 +88,7 @@ function load_mcp_servers_config(collector::MCPClientCollector, config_path::Str
         elseif occursin("ws://", url) || occursin("wss://", url)
           :websocket
         else
-          :websocket  # Default to WebSocket
+          :stdio  # Default to WebSocket
         end
         
         add_server(collector, server_id, url, transport_type; auto_initialize, client_name, client_version, setup_command, log_level)

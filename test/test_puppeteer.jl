@@ -64,3 +64,19 @@ sleep(0.2)
 click_response = call_tool(collector, "puppeteer", "puppeteer_click", Dict("selector" => "a:nth-of-type(2)"))
 println("Click result: ", click_response)
 #%%
+
+# Navigate to a website with sandbox disabled
+nav_response = call_tool(collector, "puppeteer", "puppeteer_navigate", Dict(
+    "url" => "https://example.com",
+    "allowDangerous" => true,
+    "launchOptions" => Dict(
+        "headless" => false,
+        "args" => ["--no-sandbox", "--disable-setuid-sandbox"]
+    )
+))
+#%%
+click_response = call_tool(collector, "puppeteer", "puppeteer_click", Dict("selector" => "a"))
+#%%
+
+nav_response["result"]
+click_response["result"]
