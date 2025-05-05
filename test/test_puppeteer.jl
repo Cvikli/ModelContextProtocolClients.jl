@@ -6,7 +6,7 @@ using ModelContextProtocolClients
 collector = MCPClientCollector()
 
 # Add a Puppeteer server
-add_server(collector, "puppeteer", "mcp/servers/src/puppeteer/dist/index.js", setup_command=`bash -c "cd mcp/servers/src/puppeteer && npm install && npm run build"`)
+add_server(collector, "puppeteer", path="mcp/servers/src/puppeteer/dist/index.js", setup_command=`bash -c "cd mcp/servers/src/puppeteer && npm install && npm run build"`)
 
 # Get available tools
 tools = list_tools(collector, "puppeteer")

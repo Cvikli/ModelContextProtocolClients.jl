@@ -17,7 +17,7 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
                   env::Union{Dict{String,String}, Nothing}=nothing, 
                   stdout_handler::Function=(str)->println("SERVER: $str"),
                   auto_initialize::Bool=true,
-                  client_name::String=JULIC_MCP_CLIENT,
+                  client_name::String=JULIA_MCP_CLIENT,
                   client_version::String=MCPClient_VERSION,
                   setup_command::Union{String, Cmd, Nothing}=nothing,
                   log_level::Symbol=:info)
@@ -32,7 +32,7 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
         message === nothing && break
         handle_server_output(client, message, stdout_handler)
     end
-    auto_initialize && is_connected(transport) && initialize(client; client_name, client_version)
+    auto_initialize && initialize(client; client_name, client_version)
     
     return client
 end
@@ -41,7 +41,7 @@ end
 function MCPClient(url::String, transport_type::Symbol; 
                   stdout_handler::Function=(str)->println("SERVER: $str"),
                   auto_initialize::Bool=true,
-                  client_name::String=JULIC_MCP_CLIENT,
+                  client_name::String=JULIA_MCP_CLIENT,
                   client_version::String=MCPClient_VERSION,
                   log_level::Symbol=:info,
                   setup_command::Union{String, Cmd, Nothing}=nothing)
@@ -85,7 +85,7 @@ function MCPClient(path::String;
                   transport_type::Symbol=:stdio,
                   stdout_handler::Function=(str)->nothing,
                   auto_initialize::Bool=true,
-                  client_name::String=JULIC_MCP_CLIENT,
+                  client_name::String=JULIA_MCP_CLIENT,
                   client_version::String=MCPClient_VERSION,
                   setup_command::Union{String, Cmd, Nothing}=nothing,
                   log_level::Symbol=:info)
@@ -104,10 +104,10 @@ function handle_server_output(client::MCPClient, line::String, stdout_handler::F
 	log_level == :debug && stdout_handler(line)
 	
 	client.buffer *= line
+    # @show client.buffer
 	try
 		# @show "hey"
 		response = JSON.parse(client.buffer)
-		# @show response
 		# Process valid JSON-RPC response
 		if haskey(response, "id") && haskey(response, "jsonrpc") # if "id" is present, it's a response: https://modelcontextprotocol.io/docs/concepts/transports#responses
 			req_id = response["id"]
@@ -143,7 +143,8 @@ function Base.close(client::MCPClient)
 		try kill(client.process) catch end
 	end
 	
-	if client.output_task !== nothing && client.output_task.state != :done
+	if client.output_task !== nothing && client.output_task.state != :done && client.output_task.state != :failed
+        @show client.output_task
 		Base.schedule(client.output_task, InterruptException(); error=true)
 	end
 end
@@ -183,6 +184,7 @@ function list_tools(client::MCPClient)
     end
 	return client.tools_by_name
 end
+
 function print_tools(tools_array)
     for (i, tool) in enumerate(tools_array)
         name = tool["name"]
@@ -206,9 +208,10 @@ function print_tools(tools_array)
     end
 end
 
+
 function initialize(client::MCPClient; 
                    protocol_version::String="0.1.0", 
-                   client_name::String=JULIC_MCP_CLIENT, 
+                   client_name::String=JULIA_MCP_CLIENT, 
                    client_version::String=MCPClient_VERSION, 
                    capabilities::Dict=Dict())
     params = Dict(
@@ -220,8 +223,9 @@ function initialize(client::MCPClient;
         "capabilities" => capabilities
     )
     check_process_exited(client.transport)
-
+    @show "initialize"
     response = send_request(client, method="initialize", params=params)
+    @show response
     
     # Send initialized notification after successful initialization
     response !== nothing && send_notification(client, method="notifications/initialized")

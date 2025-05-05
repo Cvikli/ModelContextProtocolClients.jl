@@ -7,7 +7,7 @@ using WebSockets: WebSocket, open, close
 using WebSockets
 
 # Get the package version from Project.toml
-const JULIC_MCP_CLIENT  = "julia-mcp-client"
+const JULIA_MCP_CLIENT  = "julia-mcp-client"
 const MCPClient_VERSION = "0.8.0"
 
 

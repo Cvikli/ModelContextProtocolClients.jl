@@ -3,7 +3,7 @@
     "servers": {
       "puppeteer": {
         "command": "npx",
-        "args": ["-y", "@modelcontextprotocol/server-puppeteer"]
+        "args": ["-y", "@upstash/context7-mcp@latest"]
       }
     }
   }

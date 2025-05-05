@@ -17,24 +17,22 @@ collector = MCPClientCollector()
 # Add servers with environment variables
 # Uncomment the servers you want to test
 
-# add_server(collector, "slack", "mcp/slack-mcp-server/dist/index.js")
+# add_server(collector, "slack", path="mcp/slack-mcp-server/dist/index.js")
 
-# add_server(collector, "raw-web-browser", "mcp/mcp-server-rag-web-browser/dist/index.js", 
-#           Dict("APIFY_TOKEN" => ENV["APIFY_TOKEN"]))
+# add_server(collector, "raw-web-browser", path="mcp/mcp-server-rag-web-browser/dist/index.js", env=Dict("APIFY_TOKEN" => ENV["APIFY_TOKEN"]))
 
-# add_server(collector, "time", "mcp/servers/src/time/src/mcp_server_time/__main__.py") # DOESN'T WORKING!!
+# add_server(collector, "time", path="mcp/servers/src/time/src/mcp_server_time/__main__.py") # DOESN'T WORKING!!
 
 # SENTRY_TOKEN from environment or fallback
-# add_server(collector, "sentry", "mcp/servers/src/sentry/src/mcp_server_sentry/__main__.py", 
-#           Dict("SENTRY_TOKEN" => ENV["SENTRY_TOKEN"]))
+# add_server(collector, "sentry", path="mcp/servers/src/sentry/src/mcp_server_sentry/__main__.py", env=Dict("SENTRY_TOKEN" => ENV["SENTRY_TOKEN"]))
 
 # COINMARKET_API_KEY from environment or fallback
 # add_server(collector, "coinmarket", "mcp/coinmarket-mcp-server/src/coinmarket_service/server.py", 
 #           Dict("COINMARKET_API_KEY" => ENV["COINMARKET_API_KEY"]))
-add_server(collector, "mcp-bitte", "https://mcp.bitte.ai/sse", :sse)
-# add_server(collector, "twitter", "mcp/mcp-twitter-noauth/src/mcp_server_twitter_noauth/__init__.py")
-# add_server(collector, "git", "mcp/servers/src/git/src/mcp_server_git/__main__.py")
-# add_server(collector, "fetch", "mcp/servers/src/fetch/src/mcp_server_fetch/__main__.py")
+add_server(collector, "mcp-bitte", url="https://mcp.bitte.ai/sse", transport_type=:sse)
+# add_server(collector, "twitter", path="mcp/mcp-twitter-noauth/src/mcp_server_twitter_noauth/__init__.py")
+# add_server(collector, "git", path="mcp/servers/src/git/src/mcp_server_git/__main__.py")
+# add_server(collector, "fetch", path="mcp/servers/src/fetch/src/mcp_server_fetch/__main__.py")
 # client = MCPClient(`python3 -m mcp_server_fetch`)
 # client = MCPClient(`node mcp/servers/src/google-maps/dist/index.js`, env=Dict("GOOGLE_MAPS_API_KEY" => ENV["GOOGLE_MAPS_API_KEY"]))
 tools = list_tools(collector, "mcp-bitte")

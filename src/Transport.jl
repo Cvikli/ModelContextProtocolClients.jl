@@ -22,17 +22,18 @@ end
 function open_transport(transport::StdioTransport)
     transport.process = transport.env === nothing ?
         Base.open(pipeline(transport.command, stderr=stdout), "r+") :
-        Base.open(pipeline(setenv(transport.command, transport.env), stderr=stdout), "r+")
+        Base.open(pipeline(setenv(transport.command, merge(Dict("PATH" => ENV["PATH"]), transport.env)), stderr=stdout), "r+")
     return transport
 end
 
-is_connected(transport::StdioTransport)     = true
+is_connected(transport::StdioTransport) = !process_running(transport.process)
 function read_message(transport::StdioTransport)
-    return !process_running(transport.process) && !eof(transport.process) ? readline(transport.process) : nothing
+    return process_running(transport.process) && !eof(transport.process) ? readline(transport.process) : nothing
 end
 
-function check_process_exited(transport)
+function check_process_exited(transport::StdioTransport)
     sleep(0.4)
+    @show "check_process_exited"
     if process_exited(transport.process)
         @error "Process failed to start. Check for missing modules or bad command."
         if transport.setup_command !== nothing
@@ -48,6 +49,8 @@ function check_process_exited(transport)
             @info "We couldn't start the process and the fallback method to the setup_command isn't availabel as the setup_command wasn't provided, so we give up"
             rethrow(e)
         end
+    else
+        @info "Process is running" process=transport.process
     end
 end
 function write_message(transport::StdioTransport, message::String)
@@ -61,7 +64,7 @@ end
 
 function process_running(process::Base.Process)
     try
-        process_exited(process) && return false
+        process !== nothing && process_exited(process) && return false
         return true
     catch
         return false
@@ -160,6 +163,7 @@ function open_transport(transport::SSETransport)
     return transport
 end
 is_connected(transport::SSETransport)       = transport.session_id !== nothing
+check_process_exited(transport::SSETransport) = transport.client !== nothing
 
 # Helper to resolve the message endpoint URL (only called once when endpoint is established)
 function resolve_message_endpoint(transport::SSETransport)
@@ -199,14 +203,11 @@ function read_message(transport::SSETransport)
 end
 
 function write_message(transport::SSETransport, message::String)
-    println("CLIENT: $message")
-    # SSE is unidirectional, so we need to make a separate HTTP request
+    # println("CLIENT: $message")
     is_connected(transport) || (open_transport(transport) && wait_for_condition(() -> is_connected(transport), 5.0, message="Failed to re-establish SSE session") && @info "SSE session re-established")
     
-    @info "Sending message to: $transport.resolved_endpoint"
-    response = HTTP.post(transport.resolved_endpoint, 
-            ["Content-Type" => "application/json"], 
-            message)
+    # @info "Sending message to: $transport.resolved_endpoint"
+    response = HTTP.post(transport.resolved_endpoint, ["Content-Type" => "application/json"], message)
     @debug "POST response: $(String(response.body)) ($(response.status))"
 end
 
@@ -265,6 +266,7 @@ function open_transport(transport::WebSocketTransport)
 end
 
 is_connected(transport::WebSocketTransport) = transport.ws !== nothing
+check_process_exited(transport::WebSocketTransport) = transport.ws !== nothing
 
 
 function read_message(transport::WebSocketTransport)

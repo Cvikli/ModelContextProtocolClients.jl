@@ -4,7 +4,7 @@ using ModelContextProtocolClients
 collector = MCPClientCollector()
 
 # Add a WebSocket server
-add_server(collector, "websocket_server", "ws://localhost:8080/ws", :websocket)
+add_server(collector, "websocket_server", url="ws://localhost:8080/ws", transport_type=:websocket)
 
 # List available tools
 tools = list_tools(collector, "websocket_server")

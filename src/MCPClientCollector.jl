@@ -4,12 +4,12 @@ end
 list_clients(collector::MCPClientCollector) = collect(keys(collector.servers))
 
 # Unified add_server function that handles all cases based on provided kwargs
+add_server(collector::MCPClientCollector, server_id::String; client::MCPClient) = return collector.servers[server_id] = client
 function add_server(collector::MCPClientCollector, server_id::String;
                     # Common parameters
-                    env::Union{Dict{String, String}, Nothing}=nothing,
                     stdout_handler::Function=(str)->println("SERVER: $str"),
                     auto_initialize::Bool=true,
-                    client_name::String="julia-mcp-client",
+                    client_name::String=JULIA_MCP_CLIENT,
                     client_version::String=MCPClient_VERSION,
                     setup_command::Union{String, Cmd, Nothing}=nothing,
                     log_level::Symbol=:info,
@@ -19,6 +19,7 @@ function add_server(collector::MCPClientCollector, server_id::String;
                     # Command-based parameters
                     command::Union{String, Nothing}=nothing,
                     args::Vector{String}=String[],
+                    env::Union{Dict{String, String}, Nothing}=nothing,
                     # URL-based parameters
                     url::Union{String, Nothing}=nothing)
     
@@ -59,7 +60,7 @@ end
 function load_mcp_servers_config(collector::MCPClientCollector, config_path::String;
                                 workdir_prefix::String="",
                                 auto_initialize::Bool=true,
-                                client_name::String="julia-mcp-client",
+                                client_name::String=JULIA_MCP_CLIENT,
                                 client_version::String=MCPClient_VERSION,
                                 log_level::Symbol=:info,
                                 setup_command::Union{String, Cmd, Nothing}=nothing)
@@ -90,7 +91,7 @@ function load_mcp_servers_config(collector::MCPClientCollector, config_path::Str
           :stdio  # Default to WebSocket
         end
         
-        add_server(collector, server_id, url, transport_type; auto_initialize, client_name, client_version, setup_command, log_level)
+        add_server(collector, server_id; url, transport_type, auto_initialize, client_name, client_version, setup_command, log_level)
       else
         # Clone from gitUrl if specified and directory doesn't exist
         dir = joinpath(workdir_prefix, server_id)
@@ -104,8 +105,9 @@ function load_mcp_servers_config(collector::MCPClientCollector, config_path::Str
         # Convert env to Dict{String,String} if present
         env_dict = env === nothing ? nothing : Dict{String,String}(k => string(v) for (k,v) in env)
         
+        @show env_dict
         # Add server using the command and args directly
-        add_server(collector, server_id, command, args; auto_initialize, client_name, client_version, setup_command, log_level, env=env_dict)
+        add_server(collector, server_id; command, args, auto_initialize, client_name, client_version, setup_command, log_level, env=env_dict)
       end
     end
 	end
@@ -127,7 +129,7 @@ function explore_mcp_servers_in_directory(collector::MCPClientCollector, directo
                               exclude_patterns::Vector{String}=String[".git", "node_modules"],
                               auto_initialize::Bool=true,
                               stdout_handler::Function=(str)->println("SERVER: $str"),
-                              client_name::String="julia-mcp-client",
+                              client_name::String=JULIA_MCP_CLIENT,
                               client_version::String=MCPClient_VERSION,
                               log_level::Symbol=:info)
     !isdir(directory) && error("Directory not found: $directory")
@@ -188,12 +190,7 @@ function explore_mcp_servers_in_directory(collector::MCPClientCollector, directo
       end
       
       # Add the server
-      add_server(collector, server_id, command, args; 
-                stdout_handler=stdout_handler,
-                auto_initialize=auto_initialize,
-                client_name=client_name,
-                client_version=client_version,
-                setup_command=setup_command)
+      add_server(collector, server_id; command, args, stdout_handler, auto_initialize, client_name, client_version, setup_command)
       
       @info "Successfully loaded MCP server '$server_id'"
       loaded_servers += 1
