@@ -1,4 +1,4 @@
-using ModelContextProtocolClient
+using ModelContextProtocolClients
 
 mkpath("mcp")  # Create mcp directory if it doesn't exist
 
@@ -96,7 +96,7 @@ send_request(client, """
 #%%
 
 #%%
-using ModelContextProtocolClient: send_request
+using ModelContextProtocolClients: send_request
 send_request(collector.servers["git"], """
 {
   "jsonrpc": "2.0",
