@@ -9,7 +9,9 @@
       },
       "transport": "<stdio|sse>",
       "url": "<optional-url-for-sse>",
-      "workingDir": "<optional-working-directory>"
+      "workingDir": "<optional-working-directory>",
+      "gitUrl": "",  // I added this!! not standard!!
+      setup_command: "", // I added this!! not standard!!
     },
     ...
   }

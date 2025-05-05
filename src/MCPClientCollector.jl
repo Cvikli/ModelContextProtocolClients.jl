@@ -5,20 +5,15 @@ list_clients(collector::MCPClientCollector) = collect(keys(collector.servers))
 
 # Add server with a path
 function add_server(collector::MCPClientCollector, server_id::String, 
-  path::String; 
+  path::String, transport_type::Symbol=:stdio; 
   env::Union{Dict{String, String}, Nothing}=nothing, 
                    stdout_handler::Function=(str)->println("SERVER: $str"),
                    auto_initialize::Bool=true,
                    client_name::String="julia-mcp-client",
                    client_version::String=MCPClient_VERSION,
-                   setup_command::Union{String, Cmd, Nothing}=nothing)
-    collector.servers[server_id] = MCPClient(path; 
-                                           env=env, 
-                                           stdout_handler=stdout_handler,
-                                           auto_initialize=auto_initialize,
-                                           client_name=client_name,
-                                           client_version=client_version,
-                                           setup_command=setup_command)
+                   setup_command::Union{String, Cmd, Nothing}=nothing,
+                   log_level::Symbol=:info)
+  collector.servers[server_id] = MCPClient(path; env, transport_type,stdout_handler,auto_initialize,client_name,client_version,setup_command,log_level)
 end
 
 function add_server(collector::MCPClientCollector, server_id::String, 
@@ -29,13 +24,7 @@ function add_server(collector::MCPClientCollector, server_id::String,
                    client_name::String="julia-mcp-client",
                    client_version::String=MCPClient_VERSION,
                    setup_command::Union{String, Cmd, Nothing}=nothing)
-    collector.servers[server_id] = MCPClient(command, args; 
-                                           env=env, 
-                                           stdout_handler=stdout_handler,
-                                           auto_initialize=auto_initialize,
-                                           client_name=client_name,
-                                           client_version=client_version,
-                                           setup_command=setup_command)
+    collector.servers[server_id] = MCPClient(command, args; env, stdout_handler,auto_initialize,client_name,client_version,setup_command)
 end
 
 # Add server with a URL (WebSocket or SSE)
@@ -46,19 +35,15 @@ function add_server(collector::MCPClientCollector, server_id::String,
                    client_name::String="julia-mcp-client",
                    client_version::String=MCPClient_VERSION,
                    log_level::Symbol=:info)
-    collector.servers[server_id] = MCPClient(url, transport_type; 
-                                           stdout_handler=stdout_handler,
-                                           auto_initialize=auto_initialize,
-                                           client_name=client_name,
-                                           client_version=client_version,
-                                           log_level=log_level)
+    collector.servers[server_id] = MCPClient(url, transport_type; stdout_handler,auto_initialize,client_name,client_version,log_level)
 end
 
 remove_server(collector::MCPClientCollector, server_id::String) = haskey(collector.servers, server_id) && (close(collector.servers[server_id]); delete!(collector.servers, server_id))
-disconnect_all(collector::MCPClientCollector) = (for (_, client) in collector.servers; close(client); end; empty!(collector.servers))
+disconnect_all(collector::MCPClientCollector)                   = (for (_, client) in collector.servers; close(client); end; empty!(collector.servers))
 
 
-get_all_tools(collector::MCPClientCollector) = [(server_id, tool_name, info) for (server_id, client) in collector.servers for (tool_name, info) in client.tools_by_name]
+get_all_tools(collector::MCPClientCollector)                 = [(server_id, tool_name, info) for (server_id, client) in collector.servers for (tool_name, info) in client.tools_by_name]
+list_all_tools(collector::MCPClientCollector)                = Dict(server_id=>list_tools(client) for (server_id, client) in collector.servers)
 list_tools(collector::MCPClientCollector, server_id::String) = isempty(collector.servers[server_id].tools_by_name) ? list_tools(collector.servers[server_id]) : collector.servers[server_id].tools_by_name
 
 function call_tool(collector::MCPClientCollector, server_id::String, tool_name::String, arguments::Dict)
@@ -70,6 +55,7 @@ end
 # - claude_desktop_config.json
 # - mcp.json
 function load_mcp_servers_config(collector::MCPClientCollector, config_path::String;
+                                workdir_prefix::String="",
                                 auto_initialize::Bool=true,
                                 client_name::String="julia-mcp-client",
                                 client_version::String=MCPClient_VERSION,
@@ -82,44 +68,44 @@ function load_mcp_servers_config(collector::MCPClientCollector, config_path::Str
 	elseif haskey(config, "mcpServers")
 		servers_config = config["mcpServers"]
 	else
-		error("Invalid MCP server configuration format. Expected 'mcp.servers' or 'mcpServers' key.")
+		error("Invalid MCP server configuration format. Expected 'mcp.servers' or 'mcpServers' key in the config file.")
 	end
-	
-	for (server_id, server_config) in servers_config
-		# Check if this is a URL-based server (WebSocket or SSE)
-		if haskey(server_config, "url")
-			url = server_config["url"]
-			transport_type = if haskey(server_config, "transport")
-				Symbol(server_config["transport"])
-			elseif occursin("/sse", url)
-				:sse
-			elseif occursin("ws://", url) || occursin("wss://", url)
-				:websocket
-			else
-				:websocket  # Default to WebSocket
-			end
-			
-			add_server(collector, server_id, url, transport_type;
-					  auto_initialize=auto_initialize,
-					  client_name=client_name,
-					  client_version=client_version)
-		else
-			# Standard command-based server
-			command = server_config["command"]
-			args = String.(get(server_config, "args", String[]))
-			env = get(server_config, "env", nothing)
-			
-			# Convert env to Dict{String,String} if present
-			env_dict = env === nothing ? nothing : Dict{String,String}(k => string(v) for (k,v) in env)
-			
-			# Add server using the command and args directly
-			add_server(collector, server_id, command, args; 
-					  env=env_dict,
-					  auto_initialize=auto_initialize,
-					  client_name=client_name,
-					  client_version=client_version,
-					  setup_command=nothing)
-		end
+
+	cd(workdir_prefix) do 
+		for (server_id, server_config) in servers_config
+
+      # Check if this is a URL-based server (WebSocket or SSE)
+      if haskey(server_config, "url")
+        url = server_config["url"]
+        transport_type = if haskey(server_config, "transport")
+          Symbol(server_config["transport"])
+        elseif occursin("/sse", url)
+          :sse
+        elseif occursin("ws://", url) || occursin("wss://", url)
+          :websocket
+        else
+          :websocket  # Default to WebSocket
+        end
+        
+        add_server(collector, server_id, url, transport_type; auto_initialize, client_name, client_version)
+      else
+        # Clone from gitUrl if specified and directory doesn't exist
+        dir = joinpath(workdir_prefix, server_id)
+        haskey(server_config, "gitUrl") && !isdir(dir) && run(`git clone $(server_config["gitUrl"]) $dir`)
+        # Standard command-based server
+        command = server_config["command"]
+        args = String.(get(server_config, "args", String[]))
+        env = get(server_config, "env", nothing)
+        setup_command = get(server_config, "setup_command", nothing)
+        
+        # Convert env to Dict{String,String} if present
+        env_dict = env === nothing ? nothing : Dict{String,String}(k => string(v) for (k,v) in env)
+        
+        # Add server using the command and args directly
+        add_server(collector, server_id, command, args; auto_initialize, client_name, client_version, setup_command,
+              env=env_dict, )
+      end
+    end
 	end
 
 	# Print loaded servers

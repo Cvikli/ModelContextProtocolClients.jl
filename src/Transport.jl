@@ -81,84 +81,74 @@ end
 
 function start_sse_client(transport::SSETransport)
     transport.task = @async begin
-        try
-            HTTP.open("GET", transport.url) do stream
-                transport.client = stream
-                current_event = ""
-                current_data = ""
-                buffer = IOBuffer()
+        HTTP.open("GET", transport.url) do stream
+            transport.client = stream
+            current_event = ""
+            current_data = ""
+            buffer = IOBuffer()
+            
+            # Use a buffer to read larger chunks at once
+            while !eof(stream)
+                write(buffer, readavailable(stream))
+                seekstart(buffer)
                 
-                # Use a buffer to read larger chunks at once
-                while !eof(stream)
-                    write(buffer, readavailable(stream))
-                    seekstart(buffer)
-                    
-                    while !eof(buffer)
-                        line = readline(buffer)
-                        # @show line
-                        if startswith(line, "event:")
-                            current_event = strip(line[7:end])
-                        elseif startswith(line, "data:") || (line !== "" && !isempty(current_data))
-                            # Accumulate data lines for the same event
-                            if !isempty(current_data)
-                                current_data *= line
-                            else
-                                current_data = strip(line[6:end])
-                            end
-                        elseif line == "" && !isempty(current_data)  # Empty line marks end of event
-                            # Process complete event
-                            if current_event == "endpoint"
-                                # The server sends the full URI with the session_id as a query parameter
-                                @info "Received endpoint event: $current_data"
-                                session_id_match = match(r"sessionId=([^&\s]+)", current_data)
-                                if session_id_match !== nothing
-                                    transport.session_id = session_id_match.captures[1]
-                                    # Store the message endpoint for later use
-                                    transport.message_endpoint = current_data
-                                    @info "SSE session established with ID: $(transport.session_id)"
-                                else
-                                    @warn "Failed to extract session_id from endpoint $current_data"
-                                end
-                            elseif current_event == "message"
-                                # Regular message event
-                                @debug "Received message event: $current_data"
-                                # Try to validate if it's complete JSON before putting in buffer
-                                try
-                                    # Just check if it parses, don't store the result
-                                    JSON.parse(current_data)
-                                    put!(transport.buffer, current_data)
-                                catch e
-                                    @warn "Received incomplete JSON in message event, skipping: $(typeof(e))"
-                                    @debug "Incomplete JSON content: $current_data"
-                                end
-                            else
-                                @debug "Received unknown event type: $current_event with $current_data"
-                            end
-                            
-                            # Reset for next event
-                            current_event = ""
-                            current_data = ""
+                while !eof(buffer)
+                    line = readline(buffer)
+                    # @show line
+                    if startswith(line, "event:")
+                        current_event = strip(line[7:end])
+                    elseif startswith(line, "data:") || (line !== "" && !isempty(current_data))
+                        # Accumulate data lines for the same event
+                        if !isempty(current_data)
+                            current_data *= line
                         else
-                            @warn "Prepare our protocol to handle this event too"
-                            @show current_event
-                            @show current_data
-                            @warn "Received unknown event type: $line"
+                            current_data = strip(line[6:end])
                         end
+                    elseif line == "" && !isempty(current_data)  # Empty line marks end of event
+                        # Process complete event
+                        if current_event == "endpoint"
+                            # The server sends the full URI with the session_id as a query parameter
+                            @info "Received endpoint event: $current_data"
+                            session_id_match = match(r"sessionId=([^&\s]+)", current_data)
+                            if session_id_match !== nothing
+                                transport.session_id = session_id_match.captures[1]
+                                # Store the message endpoint for later use
+                                transport.message_endpoint = current_data
+                                @info "SSE session established with ID: $(transport.session_id)"
+                            else
+                                @warn "Failed to extract session_id from endpoint $current_data"
+                            end
+                        elseif current_event == "message"
+                            # Regular message event
+                            @debug "Received message event: $current_data"
+                            # Try to validate if it's complete JSON before putting in buffer
+                            try
+                                # Just check if it parses, don't store the result
+                                JSON.parse(current_data)
+                                put!(transport.buffer, current_data)
+                            catch e
+                                @warn "Received incomplete JSON in message event, skipping: $(typeof(e))"
+                                @debug "Incomplete JSON content: $current_data"
+                            end
+                        else
+                            @debug "Received unknown event type: $current_event with $current_data"
+                        end
+                        
+                        # Reset for next event
+                        current_event = ""
+                        current_data = ""
+                    else
+                        @warn "Prepare our protocol to handle this event too"
+                        @show current_event
+                        @show current_data
+                        @warn "Received unknown event type: $line"
                     end
-                    
-                    # Reset buffer for next chunk
-                    seekstart(buffer)
-                    truncate(buffer, 0)
-                    sleep(0.01)
                 end
-            end
-        catch e
-            @error "SSE connection error" exception=e
-            # Try to reconnect if no session was established
-            if transport.session_id === nothing
-                sleep(2)
-                @info "Attempting to reconnect SSE client"
-                start_sse_client(transport)
+                
+                # Reset buffer for next chunk
+                seekstart(buffer)
+                truncate(buffer, 0)
+                sleep(0.01)
             end
         end
     end
@@ -327,5 +317,23 @@ function close_transport(transport::WebSocketTransport)
     end
     if transport.ws !== nothing
         try close(transport.ws) catch end
+    end
+end
+
+
+
+# Transport factory function
+function create_transport(url::String, transport_type::Symbol; 
+    args::Vector{String}=String[], 
+    env::Union{Dict{String,String}, Nothing}=nothing,
+    setup_command::Union{String, Cmd, Nothing}=nothing)
+    if transport_type == :websocket
+        return WebSocketTransport(url)
+    elseif transport_type == :sse
+        return SSETransport(url)
+    elseif transport_type == :stdio
+        return StdioTransport(url, args; env=env, setup_command=setup_command)
+    else
+        error("Unsupported transport type: $transport_type. Use :websocket, :sse, or :stdio")
     end
 end

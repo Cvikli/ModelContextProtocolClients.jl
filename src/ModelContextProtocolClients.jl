@@ -10,6 +10,7 @@ using WebSockets
 const MCPClient_VERSION = "0.8.0"
 
 
+include("JSON-RPC.jl")
 include("Transport.jl")
 include("MCPClient.jl")
 include("MCPClientCollector.jl")

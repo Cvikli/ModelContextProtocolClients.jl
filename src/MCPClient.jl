@@ -16,8 +16,9 @@
     log_level::Symbol=:info
 end
 
-# Overload: Accept a command and arguments (stdio transport)
+# Accept a command and arguments
 function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[]; 
+                  transport_type::Symbol=:stdio,
                   env::Union{Dict{String,String}, Nothing}=nothing, 
                   stdout_handler::Function=(str)->println("SERVER: $str"),
                   auto_initialize::Bool=true,
@@ -26,17 +27,14 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
                   setup_command::Union{String, Cmd, Nothing}=nothing,
                   log_level::Symbol=:info)
     # Create transport layer with process handling
-    transport = StdioTransport(command, args; env=env, setup_command=setup_command)
+    transport = create_transport(command, transport_type; args, env, setup_command)
 
     # Create client
     client = MCPClient(
         command=string(command),
         path=command isa Cmd ? "" : join(args, " "),
         process=transport.process,
-        transport=transport,
-        env=env,
-        setup_command=setup_command,
-        log_level=log_level
+        ; transport, env, setup_command, log_level
     )
     
     client.output_task = @async while true
@@ -47,13 +45,13 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
     
     # Auto-initialize if requested
     if auto_initialize
-        initialize(client, client_name=client_name, client_version=client_version)
+        initialize(client; client_name, client_version)
     end
     
     return client
 end
 
-# WebSocket transport constructor
+# URL based constructor
 function MCPClient(url::String, transport_type::Symbol; 
                   stdout_handler::Function=(str)->println("SERVER: $str"),
                   auto_initialize::Bool=true,
@@ -61,13 +59,7 @@ function MCPClient(url::String, transport_type::Symbol;
                   client_version::String=MCPClient_VERSION,
                   log_level::Symbol=:info)
     
-    transport = if transport_type == :websocket
-        WebSocketTransport(url)
-    elseif transport_type == :sse
-        SSETransport(url)
-    else
-        error("Unsupported transport type: $transport_type. Use :websocket or :sse")
-    end
+    transport = create_transport(url, transport_type)
     
     # Create client
     client = MCPClient(
@@ -100,7 +92,7 @@ function MCPClient(url::String, transport_type::Symbol;
     # Auto-initialize if requested and connection is established
     if auto_initialize && is_connected()
         client.log_level == :debug && @debug "Connection established, sending initialize request"
-        initialize(client, client_name=client_name, client_version=client_version)
+        initialize(client; client_name, client_version)
     elseif auto_initialize && !is_connected()
         @warn "Connection not established within timeout, skipping initialization"
     end
@@ -129,14 +121,8 @@ function MCPClient(path::String;
         error("Server script must be a .py or .js file: $path")
     end
 
-    return MCPClient(executer, [path]; 
-                    env=env, 
-                    stdout_handler=stdout_handler, 
-                    auto_initialize=auto_initialize,
-                    client_name=client_name,
-                    client_version=client_version,
-                    setup_command=setup_command,
-                    log_level=log_level)
+    return MCPClient(executer, [path]; env, stdout_handler, auto_initialize,client_name,client_version,setup_command,log_level,
+                    transport_type=:stdio)
 end
 
 function handle_server_output(client::MCPClient, line::String, stdout_handler::Function, log_level::Symbol=:info)
@@ -211,15 +197,15 @@ end
 
 # Client level functions
 function list_tools(client::MCPClient)
-	response = send_request(client, method="tools/list")
-	
-	# Parse tools from response
-	if response !== nothing && 
-	   haskey(response, "result") && 
-	   haskey(response["result"], "tools")
-		client.tools_by_name = [tool for tool in response["result"]["tools"]]
-	end
-	
+    !isempty(client.tools_by_name) && return client.tools_by_name
+
+    response = send_request(client, method="tools/list")
+    # Parse tools from response
+    if response !== nothing && 
+        haskey(response, "result") && 
+        haskey(response["result"], "tools")
+        client.tools_by_name = [tool for tool in response["result"]["tools"]]
+    end
 	return client.tools_by_name
 end
 
