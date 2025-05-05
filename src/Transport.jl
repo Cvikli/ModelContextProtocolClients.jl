@@ -42,6 +42,7 @@ function StdioTransport(command::Union{Cmd, String}, args::Vector{String}=String
     return StdioTransport(process)
 end
 
+is_connected(transport::StdioTransport)     = true
 function read_message(transport::StdioTransport)
     !process_running(transport.process) && return nothing
     !eof(transport.process) ? readline(transport.process) : nothing
@@ -73,12 +74,30 @@ mutable struct SSETransport <: TransportLayer
     task::Union{Task, Nothing}
     session_id::Union{String, Nothing}
     message_endpoint::Union{String, Nothing}  # Store the message endpoint URL
+    resolved_endpoint::Union{String, Nothing} # Store the fully resolved endpoint URL
 end
 
 function SSETransport(url::String)
-    SSETransport(url, nothing, Channel{String}(100), nothing, nothing, nothing)
+    SSETransport(url, nothing, Channel{String}(100), nothing, nothing, nothing, nothing)
 end
 
+# Helper to resolve the message endpoint URL (only called once when endpoint is established)
+function resolve_message_endpoint(transport::SSETransport)
+    if transport.message_endpoint !== nothing
+        if startswith(transport.message_endpoint, "/")
+            base_url = replace(transport.url, r"/sse/?.*$" => "")
+            transport.resolved_endpoint = base_url * transport.message_endpoint
+        else
+            transport.resolved_endpoint = transport.message_endpoint
+        end
+    else
+        base_url = replace(transport.url, r"/sse/?$" => "")
+        transport.resolved_endpoint = joinpath(base_url, "messages/") * "?sessionId=" * transport.session_id
+    end
+    @info "Resolved message endpoint: $(transport.resolved_endpoint)"
+end
+
+is_connected(transport::SSETransport)       = transport.session_id !== nothing
 function start_sse_client(transport::SSETransport)
     transport.task = @async begin
         HTTP.open("GET", transport.url) do stream
@@ -114,6 +133,8 @@ function start_sse_client(transport::SSETransport)
                                 transport.session_id = session_id_match.captures[1]
                                 # Store the message endpoint for later use
                                 transport.message_endpoint = current_data
+                                # Resolve the endpoint URL once
+                                resolve_message_endpoint(transport)
                                 @info "SSE session established with ID: $(transport.session_id)"
                             else
                                 @warn "Failed to extract session_id from endpoint $current_data"
@@ -154,92 +175,36 @@ function start_sse_client(transport::SSETransport)
     end
 end
 
+# Simple helper function to wait for a condition with timeout
+function wait_for_condition(condition::Function, timeout_seconds::Float64=5.0; message::String="")
+    start_time = time()
+    
+    while (time() - start_time < timeout_seconds)
+        condition() && return true
+        sleep(0.1)
+    end
+    
+    !isempty(message) && @warn message
+    return false
+end
+
 function read_message(transport::SSETransport)
-    if transport.client === nothing
-        @info "Starting SSE client connection"
-        start_sse_client(transport)
-        
-        # Wait a short time for the session to be established
-        if transport.session_id === nothing
-            @info "Waiting for SSE session to be established..."
-            for i in 1:30  # Wait up to 15 seconds
-                sleep(0.1)
-                if transport.session_id !== nothing
-                    @info "SSE session established after $(i*0.5) seconds"
-                    break
-                end
-            end
-            
-            if transport.session_id === nothing
-                @warn "Failed to establish SSE session within timeout"
-            end
-        end
-    end
+    is_connected(transport) || (start_sse_client(transport) && wait_for_condition(() -> is_connected(transport), 3.0, message="Failed to establish SSE session within timeout") && @info "SSE session established")
     
-    if isready(transport.buffer)
-        return take!(transport.buffer)
-    end
-    
+    isready(transport.buffer) && return take!(transport.buffer)
     return nothing
 end
 
 function write_message(transport::SSETransport, message::String)
     println("CLIENT: $message")
     # SSE is unidirectional, so we need to make a separate HTTP request
-    if transport.session_id === nothing
-        @error "Cannot send message: No session_id available"
-        @info "Current transport state: client=$(transport.client !== nothing), task_running=$(transport.task !== nothing && !istaskdone(transport.task))"
-        
-        # Try to reconnect if the client is not connected
-        if transport.client === nothing || (transport.task !== nothing && istaskdone(transport.task))
-            @info "Attempting to reconnect SSE client before sending message"
-            start_sse_client(transport)
-            
-            # Wait for session establishment
-            for i in 1:10
-                sleep(0.5)
-                if transport.session_id !== nothing
-                    @info "SSE session re-established"
-                    break
-                end
-            end
-        end
-        
-        # If still no session, we can't proceed
-        # if transport.session_id === nothing
-        #     println(stderr, "Stacktrace:")
-        #     Base.show_backtrace(stderr, stacktrace())
-        #     return
-        # end
-    end
+    is_connected(transport) || (start_sse_client(transport) && wait_for_condition(() -> is_connected(transport), 5.0, message="Failed to re-establish SSE session") && @info "SSE session re-established")
     
-    # Determine the message endpoint URL
-    message_url = if transport.message_endpoint !== nothing
-        # Use the endpoint provided by the server, but ensure it's an absolute URL
-        if startswith(transport.message_endpoint, "/")
-            # It's a relative URL, so prepend the base URL
-            base_url = replace(transport.url, r"/sse/?.*$" => "")
-            base_url * transport.message_endpoint
-        else
-            # It's already an absolute URL
-            transport.message_endpoint
-        end
-    else
-        # Construct the URL based on the server's expected pattern
-        base_url = replace(transport.url, r"/sse/?$" => "")
-        joinpath(base_url, "messages/") * "?sessionId=" * transport.session_id
-    end
-    @show message_url
-    
-    @info "Sending message to: $message_url"
-    try
-        response = HTTP.post(message_url, 
-                ["Content-Type" => "application/json"], 
-                message)
-        @debug "POST response: $(String(response.body)) ($(response.status))"
-    catch e
-        @error "Error sending message to SSE server" exception=e url=message_url
-    end
+    @info "Sending message to: $transport.resolved_endpoint"
+    response = HTTP.post(transport.resolved_endpoint, 
+            ["Content-Type" => "application/json"], 
+            message)
+    @debug "POST response: $(String(response.body)) ($(response.status))"
 end
 
 function close_transport(transport::SSETransport)
@@ -279,6 +244,8 @@ function WebSocketTransport(url::String)
     WebSocketTransport(url, nothing, Channel{String}(100), nothing)
 end
 
+is_connected(transport::WebSocketTransport) = transport.ws !== nothing
+
 function start_websocket_client(transport::WebSocketTransport)
     transport.task = @async begin
         try
@@ -296,13 +263,8 @@ function start_websocket_client(transport::WebSocketTransport)
 end
 
 function read_message(transport::WebSocketTransport)
-    if transport.ws === nothing
-        start_websocket_client(transport)
-    end
-    
-    if isready(transport.buffer)
-        return take!(transport.buffer)
-    end
+    is_connected(transport) || start_websocket_client(transport)
+    isready(transport.buffer) && return take!(transport.buffer)
     
     return nothing
 end
@@ -337,3 +299,4 @@ function create_transport(url::String, transport_type::Symbol;
         error("Unsupported transport type: $transport_type. Use :websocket, :sse, or :stdio")
     end
 end
+

@@ -80,21 +80,16 @@ function MCPClient(url::String, transport_type::Symbol;
     connection_timeout = 5.0
     start_time = time()
     
-    # Check connection based on transport type
-    is_connected() = transport_type == :sse ? 
-                     transport.session_id !== nothing : 
-                     transport.ws !== nothing
-    
     # Wait until connected or timeout
-    while !is_connected() && (time() - start_time < connection_timeout)
+    while !is_connected(transport) && (time() - start_time < connection_timeout)
         sleep(0.01)
     end
     
     # Auto-initialize if requested and connection is established
-    if auto_initialize && is_connected()
+    if auto_initialize && is_connected(transport)
         client.log_level == :debug && @debug "Connection established, sending initialize request"
         initialize(client; client_name, client_version)
-    elseif auto_initialize && !is_connected()
+    elseif auto_initialize && !is_connected(transport)
         @warn "Connection not established within timeout, skipping initialization"
     end
     
@@ -174,9 +169,9 @@ function Base.close(client::MCPClient)
 	end
 end
 
-function restart_with_env(client::MCPClient, env::Dict{String,String})
+function restart_with_env(client::MCPClient, env::Dict{String,String}) # TODO this should be assigned and use the MCPClient constructor
 	close(client)
-	
+
 	if client.command !== nothing && client.path !== nothing
 		process = open(pipeline(setenv(`$(client.command) $(client.path)`, env), stderr=stdout), "r+")
 		transport = StdioTransport(process)

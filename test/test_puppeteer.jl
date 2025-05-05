@@ -25,14 +25,14 @@ call_tool(collector, "puppeteer", "puppeteer_click", Dict(
 ))
 
 # Navigate to a website with sandbox disabled
-# nav_response = call_tool(collector, "puppeteer", "puppeteer_navigate", Dict(
-#     "url" => "https://example.com",
-#     "allowDangerous" => true,
-#     "launchOptions" => Dict(
-#         "headless" => false,
-#         "args" => ["--no-sandbox", "--disable-setuid-sandbox"]
-#     )
-# ))
+nav_response = call_tool(collector, "puppeteer", "puppeteer_navigate", Dict(
+    "url" => "https://example.com",
+    "allowDangerous" => true,
+    "launchOptions" => Dict(
+        "headless" => false,
+        "args" => ["--no-sandbox", "--disable-setuid-sandbox"]
+    )
+))
 println("Navigation result: ", nav_response)
 
 # Take a screenshot
