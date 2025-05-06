@@ -7,7 +7,11 @@ using ModelContextProtocolClients: list_clients
 list_clients(collector)
 
 #%%
-tools = list_tools(collector, "tavily")
+tools[1]
+#%%
+tools[1]["inputSchema"]
+#%%
+tools = list_tools(collector, "puppeteer")
 using ModelContextProtocolClients: print_tools
 print_tools(tools)
 

@@ -8,15 +8,18 @@ export read_message, write_message, close_transport
 abstract type TransportLayer end
 
 # Stdio Transport
-mutable struct StdioTransport <: TransportLayer
+mutable struct StdioTransport{T} <: TransportLayer
     process::Union{Base.Process, Nothing}
     command::Union{Cmd, Nothing}
     setup_command::Union{String, Cmd, Nothing}
-    env::Union{Dict{String,String}, Nothing}
+    env::Union{Dict{String,T}, Nothing}
 end
 
-function StdioTransport(command::Union{Cmd, String}, args::Vector{String}=String[], env::Union{Dict{String,String}, Nothing}=nothing, setup_command::Union{String, Cmd, Nothing}=nothing)
-    return StdioTransport(nothing, command isa Cmd ? command : `$command $args`, setup_command, env)
+function StdioTransport(command::Union{Cmd, String}, args::Vector{String}, env::Nothing, setup_command::Union{String, Cmd, Nothing}=nothing)
+    return StdioTransport{Nothing}(nothing, command isa Cmd ? command : `$command $args`, setup_command, env)
+end
+function StdioTransport(command::Union{Cmd, String}, args::Vector{String}, env::Dict{String,T}, setup_command::Union{String, Cmd, Nothing}=nothing) where T
+    return StdioTransport{T}(nothing, command isa Cmd ? command : `$command $args`, setup_command, env)
 end
 
 function open_transport(transport::StdioTransport)
@@ -72,7 +75,7 @@ function process_running(process::Base.Process)
 end
 
 # SSE Transport
-mutable struct SSETransport <: TransportLayer
+mutable struct SSETransport{T} <: TransportLayer
     url::String
     client::Union{HTTP.Streams.Stream, Nothing}
     buffer::Channel{String}
@@ -80,10 +83,11 @@ mutable struct SSETransport <: TransportLayer
     session_id::Union{String, Nothing}
     message_endpoint::Union{String, Nothing}  # Store the message endpoint URL
     resolved_endpoint::Union{String, Nothing} # Store the fully resolved endpoint URL
+    env::Union{Dict{String,T}, Nothing}
 end
 
-function SSETransport(url::String)
-    SSETransport(url, nothing, Channel{String}(100), nothing, nothing, nothing, nothing)
+function SSETransport(url::String, env::Union{Dict{String,String}, Nothing})
+    SSETransport(url, nothing, Channel{String}(100), nothing, nothing, nothing, nothing, env)
 end
 function open_transport(transport::SSETransport)
     transport.task = @async begin
@@ -237,15 +241,16 @@ function close_transport(transport::SSETransport)
 end
 
 # WebSocket Transport
-mutable struct WebSocketTransport <: TransportLayer
+mutable struct WebSocketTransport{T} <: TransportLayer
     url::String
     ws::Union{WebSocket, Nothing}
     buffer::Channel{String}
     task::Union{Task, Nothing}
+    env::Union{Dict{String,T}, Nothing}
 end
 
-function WebSocketTransport(url::String)
-    WebSocketTransport(url, nothing, Channel{String}(100), nothing)
+function WebSocketTransport(url::String, env::Union{Dict{String,String}, Nothing})
+    WebSocketTransport(url, nothing, Channel{String}(100), nothing, env)
 end
 
 function open_transport(transport::WebSocketTransport)
@@ -292,14 +297,14 @@ end
 
 
 # Transport factory function
-function create_transport(url::String, transport_type::Symbol; 
+function create_transport(url::Union{String, Cmd}, transport_type::Symbol; 
     args::Vector{String}=String[], 
-    env::Union{Dict{String,String}, Nothing}=nothing,
-    setup_command::Union{String, Cmd, Nothing}=nothing)
+    env::Union{Dict{String,T}, Nothing}=nothing,
+    setup_command::Union{String, Cmd, Nothing}=nothing) where T
     if transport_type == :websocket
-        return open_transport(WebSocketTransport(url))
+        return open_transport(WebSocketTransport(url, env))
     elseif transport_type == :sse
-        return open_transport(SSETransport(url))
+        return open_transport(SSETransport(url, env))
     elseif transport_type == :stdio
         return open_transport(StdioTransport(url, args, env, setup_command))
     end
@@ -307,3 +312,6 @@ function create_transport(url::String, transport_type::Symbol;
     return error("Unsupported transport type: $transport_type. Use :websocket, :sse, or :stdio")
 end
 
+transport_type(transport::WebSocketTransport) = :websocket
+transport_type(transport::SSETransport) = :sse
+transport_type(transport::StdioTransport) = :stdio

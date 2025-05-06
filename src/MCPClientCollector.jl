@@ -4,7 +4,7 @@ end
 list_clients(collector::MCPClientCollector) = collect(keys(collector.servers))
 
 # Unified add_server function that handles all cases based on provided kwargs
-add_server(collector::MCPClientCollector, server_id::String; client::MCPClient) = return collector.servers[server_id] = client
+add_server(collector::MCPClientCollector, server_id::String, client::MCPClient) = return collector.servers[server_id] = client
 function add_server(collector::MCPClientCollector, server_id::String;
                     # Common parameters
                     stdout_handler::Function=(str)->println("SERVER: $str"),

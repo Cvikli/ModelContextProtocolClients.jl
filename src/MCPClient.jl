@@ -1,4 +1,3 @@
-
 @kwdef mutable struct MCPClient
 	transport::Union{TransportLayer, Nothing} = nothing
 	output_task::Union{Task, Nothing} = nothing
@@ -14,13 +13,13 @@ end
 # Accept a command and arguments
 function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[]; 
                   transport_type::Symbol=:stdio,
-                  env::Union{Dict{String,String}, Nothing}=nothing, 
+                  env::Union{Dict{String,T}, Nothing}=nothing, 
                   stdout_handler::Function=(str)->println("SERVER: $str"),
                   auto_initialize::Bool=true,
                   client_name::String=JULIA_MCP_CLIENT,
                   client_version::String=MCPClient_VERSION,
                   setup_command::Union{String, Cmd, Nothing}=nothing,
-                  log_level::Symbol=:info)
+                  log_level::Symbol=:info) where T
     # Create transport layer with process handling
     transport = create_transport(command, transport_type; args, env, setup_command)
 
@@ -36,17 +35,19 @@ function MCPClient(command::Union{Cmd, String}, args::Vector{String}=String[];
     
     return client
 end
+get_env(client::MCPClient) = client.transport.env
 
 # URL based constructor
 function MCPClient(url::String, transport_type::Symbol; 
+                  env::Union{Dict{String,T}, Nothing}=nothing, 
                   stdout_handler::Function=(str)->println("SERVER: $str"),
                   auto_initialize::Bool=true,
                   client_name::String=JULIA_MCP_CLIENT,
                   client_version::String=MCPClient_VERSION,
                   log_level::Symbol=:info,
-                  setup_command::Union{String, Cmd, Nothing}=nothing)
+                  setup_command::Union{String, Cmd, Nothing}=nothing) where T
     
-    transport = create_transport(url, transport_type; setup_command)
+    transport = create_transport(url, transport_type; env, setup_command)
     
     
     client = MCPClient(; transport, log_level)
@@ -81,14 +82,14 @@ function MCPClient(url::String, transport_type::Symbol;
 end
 
 function MCPClient(path::String; 
-                  env::Union{Dict{String,String}, Nothing}=nothing, 
+                  env::Union{Dict{String,T}, Nothing}=nothing, 
                   transport_type::Symbol=:stdio,
                   stdout_handler::Function=(str)->nothing,
                   auto_initialize::Bool=true,
                   client_name::String=JULIA_MCP_CLIENT,
                   client_version::String=MCPClient_VERSION,
                   setup_command::Union{String, Cmd, Nothing}=nothing,
-                  log_level::Symbol=:info)
+                  log_level::Symbol=:info) where T
     executer = if endswith(path, ".py")
         "python3"
     elseif endswith(path, ".js")
@@ -149,26 +150,20 @@ function Base.close(client::MCPClient)
 	end
 end
 
-function restart_with_env(client::MCPClient, env::Dict{String,String}) # TODO this should be assigned and use the MCPClient constructor
-	close(client)
-
-	if client.command !== nothing && client.path !== nothing
-		process = open(pipeline(setenv(`$(client.command) $(client.path)`, env), stderr=stdout), "r+")
-		transport = StdioTransport(process)
-		
-		client.process = process
-		client.transport = transport
-		client.output_task = @async while true
-			message = read_message(transport)
-			message === nothing && break
-			println("SERVER: $message")
-		end
-		client.req_id = 0
-	else
-		error("Cannot restart client with new environment - no command/path available")
-	end
+function get_mcp_client_copy(client::MCPClient, env::Dict{String,T}) where T # TODO this should be assigned and use the MCPClient constructor
+    return if (isa(client.transport, WebSocketTransport) || isa(client.transport, SSETransport)) && client.transport.url !== nothing # URL-based client (WebSocket or SSE)
+        MCPClient(client.transport.url, transport_type(client.transport); env, 
+                  setup_command=client.transport.setup_command, 
+                  log_level=client.log_level)
+    elseif isa(client.transport, StdioTransport) && client.transport.command !== nothing # Command-based client
+        MCPClient(client.transport.command, String[]; 
+                  env, 
+                  transport_type=transport_type(client.transport), 
+                  setup_command=client.transport.setup_command, 
+                  log_level=client.log_level)
+    end
 	
-	return client
+	error("Cannot restart client with new environment - no command/path or SSE/WebSocket URL available")
 end
 
 # Client level functions
@@ -184,14 +179,14 @@ function list_tools(client::MCPClient)
     end
 	return client.tools_by_name
 end
-
-function print_tools(tools_array)
+function print_tools(tools_array::Vector{Dict{String, Any}})
     for (i, tool) in enumerate(tools_array)
         name = tool["name"]
         desc = tool["description"]
         schema = tool["inputSchema"]
         props = schema["properties"]
         required = schema["required"]
+
         
         println("\n$name: $desc")
         println("  Required params: $(join(required, ", "))")
@@ -207,7 +202,6 @@ function print_tools(tools_array)
         i < length(tools_array) && println("---")
     end
 end
-
 
 function initialize(client::MCPClient; 
                    protocol_version::String="0.1.0", 
