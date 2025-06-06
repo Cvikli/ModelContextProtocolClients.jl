@@ -31,4 +31,6 @@ response = call_tool(collector, "context7-mcp", "resolve-library-id", Dict(
 println(response)
 
 #%%
+list_tools(collector, "context7-mcp")
+#%%
 response = call_tool(collector, "context7-mcp", "get_context", Dict())

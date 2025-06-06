@@ -38,7 +38,7 @@ function add_server(collector::MCPClientCollector, server_id::String;
                   auto_initialize, client_name, 
                   client_version, setup_command, log_level)
     end
-    error("Invalid parameters: must provide either 'url', 'path', or 'command'")
+    throw(ErrorException("Invalid parameters: must provide either 'url', 'path', or 'command'"))
 end
 
 remove_server(collector::MCPClientCollector, server_id::String) = haskey(collector.servers, server_id) && (close(collector.servers[server_id]); delete!(collector.servers, server_id))
@@ -47,10 +47,10 @@ disconnect_all(collector::MCPClientCollector)                   = (for (_, clien
 
 get_all_tools(collector::MCPClientCollector)                 = [(server_id, tool_name, info) for (server_id, client) in collector.servers for (tool_name, info) in client.tools_by_name]
 list_all_tools(collector::MCPClientCollector)                = Dict(server_id=>list_tools(client) for (server_id, client) in collector.servers)
-list_tools(collector::MCPClientCollector, server_id::String) = isempty(collector.servers[server_id].tools_by_name) ? list_tools(collector.servers[server_id]) : collector.servers[server_id].tools_by_name
+list_tools(collector::MCPClientCollector, server_id::String) = list_tools(collector.servers[server_id])
 
 function call_tool(collector::MCPClientCollector, server_id::String, tool_name::String, arguments::Dict)
-	!haskey(collector.servers, server_id) && error("Server $server_id not found or added")
+	!haskey(collector.servers, server_id) && throw(ErrorException("Server $server_id not found or added"))
 	return call_tool(collector.servers[server_id], tool_name, arguments)
 end
 
@@ -72,7 +72,7 @@ function load_mcp_servers_config(collector::MCPClientCollector, config_path::Str
 	elseif haskey(config, "mcpServers")
 		servers_config = config["mcpServers"]
 	else
-		error("Invalid MCP server configuration format. Expected 'mcp.servers' or 'mcpServers' key in the config file.")
+		throw(ErrorException("Invalid MCP server configuration format. Expected 'mcp.servers' or 'mcpServers' key in the config file."))
 	end
 
 	cd(isempty(workdir_prefix) ? "." : workdir_prefix) do 
@@ -105,7 +105,6 @@ function load_mcp_servers_config(collector::MCPClientCollector, config_path::Str
         # Convert env to Dict{String,String} if present
         env_dict = env === nothing ? nothing : Dict{String,String}(k => string(v) for (k,v) in env)
         
-        @show env_dict
         # Add server using the command and args directly
         add_server(collector, server_id; command, args, auto_initialize, client_name, client_version, setup_command, log_level, env=env_dict)
       end
@@ -132,7 +131,7 @@ function explore_mcp_servers_in_directory(collector::MCPClientCollector, directo
                               client_name::String=JULIA_MCP_CLIENT,
                               client_version::String=MCPClient_VERSION,
                               log_level::Symbol=:info)
-    !isdir(directory) && error("Directory not found: $directory")
+    !isdir(directory) && throw(ErrorException("Directory not found: $directory"))
 
     folders_n_files = readdir(directory, join=true) # Get all folders_n_files in the directory (non-recursive)
 

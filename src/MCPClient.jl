@@ -200,7 +200,6 @@ function list_tools(client::MCPClient, server_id::String="")
     !isempty(client.tools_by_name) && return client.tools_by_name
 
     response = send_request(client, method="tools/list")
-    
     (response === nothing || response.result === nothing || !haskey(response.result, "tools")) && return client.tools_by_name
     client.tools_by_name = [MCPToolSpecification(server_id, tool_dict, get_env(client)) for tool_dict in response.result["tools"]]
     return client.tools_by_name
@@ -245,7 +244,7 @@ function initialize(client::MCPClient;
     check_process_exited(client.transport)
     println("initialize $params")
     response = send_request(client, method="initialize", params=params)
-    
+    # TODO we get back client description!! We should use it and save it to client.description!! also analyze things
     # Send initialized notification after successful initialization
     response !== nothing && send_notification(client, method="notifications/initialized")
     
@@ -295,9 +294,8 @@ function send_request(client::MCPClient; method::String, params::Dict=Dict())
     client.pending_requests[req_id] = true
     
     # Use keyword constructor for @kwdef struct
-    request = JSONRPCRequest(id=req_id, method=method, params=isempty(params) ? nothing : params)
+    request = JSONRPCRequest(id=req_id, method=method, params=params)
     json_str = JSON.json(request)
-    
     write_message(client.transport, json_str)
     
     # Wait for response with timeout

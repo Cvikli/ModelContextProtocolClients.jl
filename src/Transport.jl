@@ -12,13 +12,10 @@ mutable struct StdioTransport{T} <: TransportLayer
     process::Union{Base.Process, Nothing}
     command::Union{Cmd, Nothing}
     setup_command::Union{String, Cmd, Nothing}
-    env::T
+    env::T  # env is a Dict{String,Any?}
 end
 
-function StdioTransport(command::Union{Cmd, String}, args::Vector{String}, env::Nothing, setup_command::Union{String, Cmd, Nothing}=nothing)
-    return StdioTransport{Nothing}(nothing, command isa Cmd ? command : `$command $args`, setup_command, env)
-end
-function StdioTransport(command::Union{Cmd, String}, args::Vector{String}, env::Dict{String,T}, setup_command::Union{String, Cmd, Nothing}=nothing) where T
+function StdioTransport(command::Union{Cmd, String}, args::Vector{String}, env::T, setup_command::Union{String, Cmd, Nothing}=nothing) where T
     return StdioTransport{T}(nothing, command isa Cmd ? command : `$command $args`, setup_command, env)
 end
 
@@ -36,7 +33,6 @@ end
 
 function check_process_exited(transport::StdioTransport)
     sleep(0.4)
-    @show "check_process_exited"
     if process_exited(transport.process)
         @error "Process failed to start. Check for missing modules or bad command."
         if transport.setup_command !== nothing
@@ -50,7 +46,7 @@ function check_process_exited(transport::StdioTransport)
                 Base.open(pipeline(setenv(transport.command, env), stderr=stdout), "r+")
         else
             @info "We couldn't start the process and the fallback method to the setup_command isn't availabel as the setup_command wasn't provided, so we give up"
-            rethrow(e)
+            throw(ErrorException("Failed to start process"))
         end
     else
         @info "Process is running" process=transport.process
