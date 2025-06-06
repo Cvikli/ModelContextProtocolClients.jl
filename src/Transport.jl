@@ -12,7 +12,7 @@ mutable struct StdioTransport{T} <: TransportLayer
     process::Union{Base.Process, Nothing}
     command::Union{Cmd, Nothing}
     setup_command::Union{String, Cmd, Nothing}
-    env::Union{Dict{String,T}, Nothing}
+    env::T
 end
 
 function StdioTransport(command::Union{Cmd, String}, args::Vector{String}, env::Nothing, setup_command::Union{String, Cmd, Nothing}=nothing)
@@ -83,12 +83,13 @@ mutable struct SSETransport{T} <: TransportLayer
     session_id::Union{String, Nothing}
     message_endpoint::Union{String, Nothing}  # Store the message endpoint URL
     resolved_endpoint::Union{String, Nothing} # Store the fully resolved endpoint URL
-    env::Union{Dict{String,T}, Nothing}
+    env::T
 end
 
-function SSETransport(url::String, env::Union{Dict{String,String}, Nothing})
-    SSETransport(url, nothing, Channel{String}(100), nothing, nothing, nothing, nothing, env)
+function SSETransport(url::String, env::T) where T
+    return SSETransport{T}(url, nothing, Channel{String}(100), nothing, nothing, nothing, nothing, env)
 end
+
 function open_transport(transport::SSETransport)
     transport.task = @async begin
         HTTP.open("GET", transport.url) do stream
@@ -114,6 +115,8 @@ function open_transport(transport::SSETransport)
                         else
                             current_data = strip(line[6:end])
                         end
+                    elseif startswith(line, "Internal Server Error")
+                        @error "$line"
                     elseif line == "" && !isempty(current_data)  # Empty line marks end of event
                         # Process complete event
                         if current_event == "endpoint"
@@ -150,7 +153,6 @@ function open_transport(transport::SSETransport)
                         current_event = ""
                         current_data = ""
                     else
-                        @warn "Prepare our protocol to handle this event too"
                         @show current_event
                         @show current_data
                         @warn "Received unknown event type: $line"
@@ -200,7 +202,12 @@ function wait_for_condition(condition::Function, timeout_seconds::Float64=5.0; m
 end
 
 function read_message(transport::SSETransport)
-    is_connected(transport) || (open_transport(transport) && wait_for_condition(() -> is_connected(transport), 3.0, message="Failed to establish SSE session within timeout") && @info "SSE session established")
+    if !is_connected(transport)
+        open_transport(transport)
+        if wait_for_condition(() -> is_connected(transport), 3.0, message="Failed to establish SSE session within timeout")
+            @info "SSE session established"
+        end
+    end
     
     isready(transport.buffer) && return take!(transport.buffer)
     return nothing
@@ -208,7 +215,12 @@ end
 
 function write_message(transport::SSETransport, message::String)
     # println("CLIENT: $message")
-    is_connected(transport) || (open_transport(transport) && wait_for_condition(() -> is_connected(transport), 5.0, message="Failed to re-establish SSE session") && @info "SSE session re-established")
+    if !is_connected(transport)
+        open_transport(transport)
+        if wait_for_condition(() -> is_connected(transport), 5.0, message="Failed to re-establish SSE session")
+            @info "SSE session re-established"
+        end
+    end
     
     # @info "Sending message to: $transport.resolved_endpoint"
     response = HTTP.post(transport.resolved_endpoint, ["Content-Type" => "application/json"], message)
@@ -246,11 +258,11 @@ mutable struct WebSocketTransport{T} <: TransportLayer
     ws::Union{WebSocket, Nothing}
     buffer::Channel{String}
     task::Union{Task, Nothing}
-    env::Union{Dict{String,T}, Nothing}
+    env::T
 end
 
-function WebSocketTransport(url::String, env::Union{Dict{String,String}, Nothing})
-    WebSocketTransport(url, nothing, Channel{String}(100), nothing, env)
+function WebSocketTransport(url::String, env::T) where T
+    return WebSocketTransport{T}(url, nothing, Channel{String}(100), nothing, env)
 end
 
 function open_transport(transport::WebSocketTransport)

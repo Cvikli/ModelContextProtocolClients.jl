@@ -107,33 +107,64 @@ function handle_server_output(client::MCPClient, line::String, stdout_handler::F
 	client.buffer *= line
     # @show client.buffer
 	try
-		# @show "hey"
-		response = JSON.parse(client.buffer)
+		parsed_json = JSON.parse(client.buffer)
+		
 		# Process valid JSON-RPC response
-		if haskey(response, "id") && haskey(response, "jsonrpc") # if "id" is present, it's a response: https://modelcontextprotocol.io/docs/concepts/transports#responses
-			req_id = response["id"]
+		if haskey(parsed_json, "id") && haskey(parsed_json, "jsonrpc")
+			# Convert to JSONRPCResponse or JSONRPCError
+			req_id = parsed_json["id"]
+			
+			if haskey(parsed_json, "result")
+				# Success response
+				response = JSONRPCResponse(
+					jsonrpc = parsed_json["jsonrpc"],
+					id = req_id,
+					result = parsed_json["result"]
+				)
+			elseif haskey(parsed_json, "error")
+				# Error response
+				response = JSONRPCError(
+					jsonrpc = parsed_json["jsonrpc"],
+					id = req_id,
+					error = parsed_json["error"]
+				)
+			else
+				@warn "Unknown response format: $parsed_json"
+				return
+			end
+			
 			client.responses[req_id] = response
-			client.pending_requests[req_id] = false
 			client.buffer = ""
-		elseif haskey(response, "jsonrpc") # if no "id" is present, it's a notification: https://modelcontextprotocol.io/docs/concepts/transports#notifications
-			push!(client.notifications, response)
-            if haskey(response, "method") && response["method"] == "notifications/cancelled"
-				@warn "Request cancelled: $(get(response["params"], "reason", "Unknown reason"))"
-                close(client)
+			client.pending_requests[req_id] = false
+			
+		elseif haskey(parsed_json, "jsonrpc") && haskey(parsed_json, "method")
+			# Convert to JSONRPCNotification
+			notification = JSONRPCNotification(
+				jsonrpc = parsed_json["jsonrpc"],
+				method = parsed_json["method"],
+				params = get(parsed_json, "params", nothing)
+			)
+			
+			push!(client.notifications, notification)
+			
+			if notification.method == "notifications/cancelled"
+				reason = get(notification.params, "reason", "Unknown reason")
+				@warn "Request cancelled: $reason"
+				close(client)
 			else
 				# Log other notifications at info level
                 @info "Notification received: $(response)"
 			end
 			client.buffer = ""
 		else
-			@warn "unknown message: $response"
+			@warn "Unknown message format: $parsed_json"
 		end
 	catch e
 		# Reset buffer if it gets too large
-        if length(client.buffer) > 10000
-            @warn "Buffer too large, resetting. Error: $e"
-            client.buffer = ""
-        end
+		if length(client.buffer) > 10000
+			@warn "Buffer too large, resetting. Error: $e"
+			client.buffer = ""
+		end
 	end
 end
 
@@ -170,8 +201,8 @@ function list_tools(client::MCPClient, server_id::String="")
 
     response = send_request(client, method="tools/list")
     
-    (response == nothing || !haskey(response, "result") || !haskey(response["result"], "tools")) && return client.tools_by_name
-    client.tools_by_name = [MCPToolSpecification(server_id, tool_dict, get_env(client)) for tool_dict in response["result"]["tools"]]
+    (response === nothing || response.result === nothing || !haskey(response.result, "tools")) && return client.tools_by_name
+    client.tools_by_name = [MCPToolSpecification(server_id, tool_dict, get_env(client)) for tool_dict in response.result["tools"]]
     return client.tools_by_name
 end
 function print_tools(tools_array::Vector{MCPToolSpecification})
@@ -238,16 +269,16 @@ end
 function list_resources(client::MCPClient)
     response = send_request(client, method="resources/list")
     
-    (response == nothing || !haskey(response, "result") || !haskey(response["result"], "resources")) && return Resource[]
+    (response === nothing || response.result === nothing || !haskey(response.result, "resources")) && return Resource[]
     
     resources = Resource[]
-    for resource_data in response["result"]["resources"]
+    for resource_data in response.result["resources"]
         push!(resources, Resource(
             uri = resource_data["uri"],
             name = resource_data["name"],
             description = get(resource_data, "description", nothing),
             mimeType = get(resource_data, "mimeType", nothing),
-            annotations = get(resource_data, "annotations", nothing),  # This would need proper Annotations parsing
+            annotations = get(resource_data, "annotations", nothing),
             size = get(resource_data, "size", nothing)
         ))
     end
@@ -284,16 +315,17 @@ call_tool(client::MCPClient, raw_js_request::String) = write_message(client.tran
 function call_tool(client::MCPClient, tool_name::String, arguments::Dict)
     response = send_request(client, method="tools/call", params=Dict("name" => tool_name, "arguments" => arguments))
     
-    (response == nothing || !haskey(response, "result") || !haskey(response["result"], "content")) && return nothing
+    (response === nothing || response.result === nothing || !haskey(response.result, "content")) && return nothing
+    
     content = Content[]
-    for item in response["result"]["content"]
+    for item in response.result["content"]
         if item["type"] == "text"
-            push!(content, TextContent(item["text"], get(item, "annotations", nothing)))
+            push!(content, TextContent(text=item["text"], annotations=get(item, "annotations", nothing)))
         elseif item["type"] == "image"
-            push!(content, ImageContent(item["data"], item["mimeType"], get(item, "annotations", nothing)))
+            push!(content, ImageContent(data=item["data"], mimeType=item["mimeType"], annotations=get(item, "annotations", nothing)))
         # Add other content types as needed
         end
     end
     
-    return CallToolResult(content, get(response["result"], "isError", nothing), get(response["result"], "_meta", nothing))
+    return CallToolResult(content, get(response.result, "isError", nothing), get(response.result, "_meta", nothing))
 end
