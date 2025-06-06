@@ -166,13 +166,13 @@ function get_mcp_client_copy(client::MCPClient, env::Dict{String,T}) where T # T
 end
 
 # Client level functions
-function list_tools(client::MCPClient)
+function list_tools(client::MCPClient, server_id::String="")
     !isempty(client.tools_by_name) && return client.tools_by_name
 
     response = send_request(client, method="tools/list")
     
     (response == nothing || !haskey(response, "result") || !haskey(response["result"], "tools")) && return client.tools_by_name
-    client.tools_by_name = [MCPToolSpecification("", tool, "", get_env(client)) for tool in response["result"]["tools"]]
+    client.tools_by_name = [MCPToolSpecification(server_id, tool_dict, get_env(client)) for tool_dict in response["result"]["tools"]]
     return client.tools_by_name
 end
 function print_tools(tools_array::Vector{MCPToolSpecification})

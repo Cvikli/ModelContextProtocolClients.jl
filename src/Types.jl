@@ -86,12 +86,11 @@ struct MCPToolSpecification{T} <: AbstractTool
 	description::Union{String, Nothing}
 	input_schema::InputSchema
 	annotations::Union{ToolAnnotations, Nothing}
-	user_id::String
 	env::T
 end
 
 # Constructor for MCPToolSpecification from tool dictionary
-MCPToolSpecification(server_id::String, tool_dict::Dict{String, Any}, user_id::String, env::Union{Dict{String, T}, Nothing}) where T = begin
+MCPToolSpecification(server_id::String, tool_dict::Dict{String, Any}, env::Union{Dict{String, T}, Nothing}) where T = begin
 	name = tool_dict["name"]
 	description = get(tool_dict, "description", nothing)
 	in_schema = tool_dict["inputSchema"]  # Fixed typo: was "in_shecma"
@@ -111,7 +110,7 @@ MCPToolSpecification(server_id::String, tool_dict::Dict{String, Any}, user_id::S
 		nothing
 	end
 	
-	MCPToolSpecification(server_id, name, description, input_schema, annotations, user_id, env)
+	MCPToolSpecification(server_id, name, description, input_schema, annotations, env)
 end
 
 @kwdef struct CallToolResult
