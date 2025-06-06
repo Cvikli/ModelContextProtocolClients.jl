@@ -150,19 +150,18 @@ function Base.close(client::MCPClient)
 end
 
 function get_mcp_client_copy(client::MCPClient, env::Dict{String,T}) where T # TODO this should be assigned and use the MCPClient constructor
-    return if (isa(client.transport, WebSocketTransport) || isa(client.transport, SSETransport)) && client.transport.url !== nothing # URL-based client (WebSocket or SSE)
-        MCPClient(client.transport.url, transport_type(client.transport); env, 
+    if (isa(client.transport, WebSocketTransport) || isa(client.transport, SSETransport)) && client.transport.url !== nothing # URL-based client (WebSocket or SSE)
+        return MCPClient(client.transport.url, transport_type(client.transport); env, 
                   setup_command=client.transport.setup_command, 
                   log_level=client.log_level)
     elseif isa(client.transport, StdioTransport) && client.transport.command !== nothing # Command-based client
-        MCPClient(client.transport.command, String[]; 
-                  env, 
-                  transport_type=transport_type(client.transport), 
+        return MCPClient(client.transport.command, String[]; 
+                  env, transport_type=transport_type(client.transport), 
                   setup_command=client.transport.setup_command, 
                   log_level=client.log_level)
     end
 	
-	error("Cannot restart client with new environment - no command/path or SSE/WebSocket URL available")
+	return error("Cannot restart client with new environment - no command/path or SSE/WebSocket URL available")
 end
 
 # Client level functions
