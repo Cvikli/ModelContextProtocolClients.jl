@@ -2,10 +2,10 @@
 	transport::Union{TransportLayer, Nothing} = nothing
 	output_task::Union{Task, Nothing} = nothing
 	req_id::Int=0
-	tools_by_name::Vector{Dict{String, Any}} = Vector{Dict{String, Any}}()
-	responses::Dict{Int, Dict} = Dict{Int, Dict}()
+	tools_by_name::Vector{MCPToolSpecification} = Vector{MCPToolSpecification}()
+	responses::Dict{RequestId, JSONRPCResponse} = Dict{RequestId, JSONRPCResponse}()
 	notifications::Vector{Dict} = Vector{Dict}()
-	pending_requests::Dict{Int, Bool} = Dict{Int, Bool}()
+	pending_requests::Dict{RequestId, Bool} = Dict{RequestId, Bool}()
 	buffer::String = ""
     log_level::Symbol=:info
 end
@@ -145,7 +145,6 @@ function Base.close(client::MCPClient)
 	end
 	
 	if client.output_task !== nothing && client.output_task.state != :done && client.output_task.state != :failed
-        @show client.output_task
 		Base.schedule(client.output_task, InterruptException(); error=true)
 	end
 end
@@ -171,21 +170,18 @@ function list_tools(client::MCPClient)
     !isempty(client.tools_by_name) && return client.tools_by_name
 
     response = send_request(client, method="tools/list")
-    # Parse tools from response
-    if response !== nothing && 
-        haskey(response, "result") && 
-        haskey(response["result"], "tools")
-        client.tools_by_name = [tool for tool in response["result"]["tools"]]
-    end
-	return client.tools_by_name
+    
+    (response == nothing || !haskey(response, "result") || !haskey(response["result"], "tools")) && return client.tools_by_name
+    client.tools_by_name = [MCPToolSpecification("", tool, "", get_env(client)) for tool in response["result"]["tools"]]
+    return client.tools_by_name
 end
-function print_tools(tools_array::Vector{Dict{String, Any}})
+function print_tools(tools_array::Vector{MCPToolSpecification})
     for (i, tool) in enumerate(tools_array)
-        name = tool["name"]
-        desc = tool["description"]
-        schema = tool["inputSchema"]
-        props = schema["properties"]
-        required = schema["required"]
+        name = tool.name
+        desc = tool.description
+        schema = tool.input_schema
+        props = schema.properties
+        required = schema.required
 
         
         println("\n$name: $desc")
@@ -193,8 +189,8 @@ function print_tools(tools_array::Vector{Dict{String, Any}})
         
         println("  Parameters:")
         for (param, details) in props
-            type_str = get(details, "type", "unknown")
-            param_desc = get(details, "description", "")
+            type_str = details.type
+            param_desc = details.description
             req_str = param in required ? "[REQUIRED]" : "[optional]"
             println("    • $param ($type_str) $req_str: $param_desc")
         end
@@ -217,9 +213,8 @@ function initialize(client::MCPClient;
         "capabilities" => capabilities
     )
     check_process_exited(client.transport)
-    @show "initialize"
+    println("initialize $params")
     response = send_request(client, method="initialize", params=params)
-    @show response
     
     # Send initialized notification after successful initialization
     response !== nothing && send_notification(client, method="notifications/initialized")
@@ -228,40 +223,78 @@ function initialize(client::MCPClient;
 end
 
 function send_notification(client::MCPClient; method::String, params::Dict=Dict())
-    json_str = """{"jsonrpc":"2.0","method":"$method","params":$(JSON.json(params))}"""
+    # Could create a JSONRPCNotification type and use it here
+    notification = Dict(
+        "jsonrpc" => "2.0",
+        "method" => method,
+        "params" => params
+    )
     
-    # Use transport layer for all communication
+    json_str = JSON.json(notification)
     write_message(client.transport, json_str)
     
     return Dict("result" => "notification sent")
 end
 
-list_resources(client::MCPClient)=@assert "unimplemented"
-call_tool(client::MCPClient, raw_request::String)                = send_request(client, raw_request)
-call_tool(client::MCPClient, tool_name::String, arguments::Dict) = send_request(client, method="tools/call", params=Dict("name" => tool_name, "arguments" => arguments))
-
-function send_request(client::MCPClient; method::String, params::Dict=Dict()) ## TODO can we leave out the params if empty?
-	req_id = (client.req_id += 1)
-	
-	client.pending_requests[req_id] = true
-	
-	json_str = """{"jsonrpc":"2.0","id":$(req_id),"method":"$method","params":$(JSON.json(params))}"""
-	
-	write_message(client.transport, json_str)
-	
-	# Wait for response with timeout
-	timeout = 5.0  # 5 second timeout
-	start_time = time()
-	
-	while client.pending_requests[req_id] && (time() - start_time < timeout)
-		sleep(0.1)  # Brief pause to allow response processing
-	end
-	
-	# Return response if we got one
-	return haskey(client.responses, req_id) ? client.responses[req_id] : nothing
+function list_resources(client::MCPClient)
+    response = send_request(client, method="resources/list")
+    
+    (response == nothing || !haskey(response, "result") || !haskey(response["result"], "resources")) && return Resource[]
+    
+    resources = Resource[]
+    for resource_data in response["result"]["resources"]
+        push!(resources, Resource(
+            uri = resource_data["uri"],
+            name = resource_data["name"],
+            description = get(resource_data, "description", nothing),
+            mimeType = get(resource_data, "mimeType", nothing),
+            annotations = get(resource_data, "annotations", nothing),  # This would need proper Annotations parsing
+            size = get(resource_data, "size", nothing)
+        ))
+    end
+    
+    return resources
 end
 
-function send_request(client::MCPClient, json_str::String)
-	# Use transport layer for all communication
-	write_message(client.transport, json_str)
+read_resource(client::MCPClient, uri::String) = send_request(client, method="resources/read", params=Dict("uri" => uri))
+subscribe_resource(client::MCPClient, uri::String) = send_request(client, method="resources/subscribe", params=Dict("uri" => uri))
+unsubscribe_resource(client::MCPClient, uri::String) = send_request(client, method="resources/unsubscribe", params=Dict("uri" => uri))
+
+function send_request(client::MCPClient; method::String, params::Dict=Dict())
+    req_id = (client.req_id += 1)
+    client.pending_requests[req_id] = true
+    
+    # Use keyword constructor for @kwdef struct
+    request = JSONRPCRequest(id=req_id, method=method, params=isempty(params) ? nothing : params)
+    json_str = JSON.json(request)
+    
+    write_message(client.transport, json_str)
+    
+    # Wait for response with timeout
+    timeout = 5.0
+    start_time = time()
+    
+    while client.pending_requests[req_id] && (time() - start_time < timeout)
+        sleep(0.1)
+    end
+    
+    return haskey(client.responses, req_id) ? client.responses[req_id] : nothing
+end
+
+call_tool(client::MCPClient, raw_js_request::String) = write_message(client.transport, raw_js_request)
+function call_tool(client::MCPClient, tool_name::String, arguments::Dict)
+    response = send_request(client, method="tools/call", params=Dict("name" => tool_name, "arguments" => arguments))
+    
+    (response == nothing || !haskey(response, "result") || !haskey(response["result"], "content")) && return nothing
+    content = Content[]
+    for item in response["result"]["content"]
+        if item["type"] == "text"
+            push!(content, TextContent(item["text"], get(item, "annotations", nothing)))
+        elseif item["type"] == "image"
+            push!(content, ImageContent(item["data"], item["mimeType"], get(item, "annotations", nothing)))
+        # Add other content types as needed
+        end
+    end
+    
+    return CallToolResult(content, get(response["result"], "isError", nothing), get(response["result"], "_meta", nothing))
 end
