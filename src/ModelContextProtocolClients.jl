@@ -24,7 +24,7 @@ export load_mcp_servers_config, send_request, explore_mcp_servers_in_directory
 export read_message, write_message, close_transport
 
 # MCP Schema Types
-export Role, Annotations, Content, AbstractTool
+export Role, Annotations, Content, AbstractMCPTool
 export TextContent, ImageContent, AudioContent, EmbeddedResource
 export Resource, ResourceContents, TextResourceContents, BlobResourceContents
 export InputSchema, ToolAnnotations, MCPToolSpecification, CallToolResult

@@ -55,7 +55,7 @@ end
 
 
 # Tool-related types
-abstract type AbstractTool end
+abstract type AbstractMCPTool end
 
 struct InputSchema
 	type::String  # Always "object" for MCP tools
@@ -79,7 +79,7 @@ end
 	openWorldHint::Union{Bool, Nothing} = nothing
 end
 
-struct MCPToolSpecification{T} <: AbstractTool
+struct MCPToolSpecification{T} <: AbstractMCPTool
 	server_id::String
 
 	name::String
