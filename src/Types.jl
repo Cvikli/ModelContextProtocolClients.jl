@@ -51,6 +51,11 @@ end
 	annotations::Union{Annotations, Nothing} = nothing
 end
 
+@kwdef struct CallToolResult
+	content::Vector{Content} = Content[]
+	isError::Union{Bool, Nothing} = nothing
+	_meta::Union{Dict{String,Any}, Nothing} = nothing
+end
 
 
 
@@ -80,7 +85,7 @@ end
 end
 
 struct MCPToolSpecification{T} <: AbstractMCPTool
-	server_id::String
+	server_id::String # TODO WE ACTUALLY don't have this data???
 
 	name::String
 	description::Union{String, Nothing}
@@ -113,11 +118,6 @@ MCPToolSpecification(server_id::String, tool_dict::Dict{String, Any}, env::Union
 	MCPToolSpecification(server_id, name, description, input_schema, annotations, env)
 end
 
-@kwdef struct CallToolResult
-	content::Vector{Content} = Content[]
-	isError::Union{Bool, Nothing} = nothing
-	_meta::Union{Dict{String,Any}, Nothing} = nothing
-end
 
 @kwdef struct Resource
 	uri::String
