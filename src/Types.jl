@@ -5,7 +5,7 @@
 
 # Annotations for content
 @kwdef struct Annotations
-	audience::Union{Vector{Role}, Nothing} = nothing
+	audience::Union{Vector{Symbol}, Nothing} = nothing  # TODO: Role type!
 	priority::Union{Float64, Nothing} = nothing
 end
 
@@ -84,14 +84,14 @@ end
 	openWorldHint::Union{Bool, Nothing} = nothing
 end
 
-struct MCPToolSpecification{T} <: AbstractMCPTool
+struct MCPToolSpecification <: AbstractMCPTool
 	server_id::String # TODO WE ACTUALLY don't have this data???
 
 	name::String
 	description::Union{String, Nothing}
 	input_schema::InputSchema
 	annotations::Union{ToolAnnotations, Nothing}
-	env::T
+	env::Any
 end
 
 # Constructor for MCPToolSpecification from tool dictionary
