@@ -196,7 +196,7 @@ function get_mcp_client_copy(client::MCPClient, env::Dict{String,T}) where T # T
 end
 
 # Client level functions
-function list_tools(client::MCPClient, server_id::String="")
+function list_tools(client::MCPClient, server_id::String="")::Vector{MCPToolSpecification}
     !isempty(client.tools_by_name) && return client.tools_by_name
 
     response = send_request(client, method="tools/list")

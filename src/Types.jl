@@ -73,6 +73,10 @@ struct InputSchema
 		type != "object" && @warn "InputSchema type should be 'object' for MCP tools, got '$type'"
 		new(type, properties, required)
 	end
+	InputSchema(input_schema_data::Dict{String, Any}) = InputSchema(
+		get(input_schema_data, "properties", nothing),
+		get(input_schema_data, "required", nothing)
+	)
 end
 
 # Tool annotations based on MCP schema
@@ -83,6 +87,13 @@ end
 	idempotentHint::Union{Bool, Nothing} = nothing
 	openWorldHint::Union{Bool, Nothing} = nothing
 end
+ToolAnnotations(annotations_data::Dict{String, Any}) = ToolAnnotations(
+    title = get(annotations_data, "title", nothing),
+    readOnlyHint = get(annotations_data, "readOnlyHint", nothing),
+    destructiveHint = get(annotations_data, "destructiveHint", nothing),
+    idempotentHint = get(annotations_data, "idempotentHint", nothing),
+    openWorldHint = get(annotations_data, "openWorldHint", nothing)
+)
 
 struct MCPToolSpecification <: AbstractMCPTool
 	server_id::String # TODO WE ACTUALLY don't have this data???
@@ -91,7 +102,7 @@ struct MCPToolSpecification <: AbstractMCPTool
 	description::Union{String, Nothing}
 	input_schema::InputSchema
 	annotations::Union{ToolAnnotations, Nothing}
-	env::Any
+	env::Dict{String, Any}
 end
 
 # Constructor for MCPToolSpecification from tool dictionary
@@ -114,8 +125,9 @@ MCPToolSpecification(server_id::String, tool_dict::Dict{String, Any}, env::Union
 	else
 		nothing
 	end
-	
-	MCPToolSpecification(server_id, name, description, input_schema, annotations, env)
+	final_env = env === nothing ? Dict{String, Any}() : Dict{String, Any}(env)
+
+	MCPToolSpecification(server_id, name, description, input_schema, annotations, final_env)
 end
 
 
