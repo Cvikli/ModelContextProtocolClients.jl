@@ -4,11 +4,33 @@
 @enum Role user assistant
 
 # Annotations for content
-@kwdef struct Annotations
-	audience::Union{Vector{Symbol}, Nothing} = nothing  # TODO: Role type!
-	priority::Union{Float64, Nothing} = nothing
+struct Annotations
+	audience::Union{Vector{String}, Nothing}
+	priority::Union{Float64, Nothing}
+	
+	function Annotations(; audience=nothing, priority=nothing)
+		# Validate priority if provided
+		if priority !== nothing && !(0.0 <= priority <= 1.0)
+			@warn "Priority should be between 0.0 and 1.0, got $priority"
+			priority = max(0.0, min(1.0, priority))
+		end
+		new(audience, priority)
+	end
 end
 
+# Add constructor for Annotations from Dict with validation
+function Annotations(annotations_data::Dict{String, Any})
+	audience = get(annotations_data, "audience", nothing)
+	priority = get(annotations_data, "priority", nothing)
+	
+	# Validate audience if provided
+	if audience !== nothing && !isa(audience, Vector{String})
+		@warn "Audience should be a Vector{String}, got $(typeof(audience))"
+		audience = nothing
+	end
+	
+	return Annotations(; audience, priority)
+end
 
 abstract type ResourceContents end
 struct TextResourceContents <: ResourceContents
@@ -29,6 +51,21 @@ abstract type Content end
 	type::String = "text"
 	text::String
 	annotations::Union{Annotations, Nothing} = nothing
+end
+
+# Add constructor for TextContent from Dict
+function TextContent(content_data::Dict{String, Any})
+	annotations = if haskey(content_data, "annotations") && content_data["annotations"] !== nothing
+		Annotations(content_data["annotations"])
+	else
+		nothing
+	end
+	
+	return TextContent(
+		type = get(content_data, "type", "text"),
+		text = content_data["text"],
+		annotations = annotations
+	)
 end
 
 @kwdef struct ImageContent <: Content
@@ -80,20 +117,34 @@ struct InputSchema
 end
 
 # Tool annotations based on MCP schema
-@kwdef struct ToolAnnotations
-	title::Union{String, Nothing} = nothing
-	readOnlyHint::Union{Bool, Nothing} = nothing
-	destructiveHint::Union{Bool, Nothing} = nothing  
-	idempotentHint::Union{Bool, Nothing} = nothing
-	openWorldHint::Union{Bool, Nothing} = nothing
+struct ToolAnnotations
+	title::Union{String, Nothing}
+	readOnlyHint::Union{Bool, Nothing}
+	destructiveHint::Union{Bool, Nothing}
+	idempotentHint::Union{Bool, Nothing}
+	openWorldHint::Union{Bool, Nothing}
+	
+	function ToolAnnotations(; title=nothing, readOnlyHint=nothing, destructiveHint=nothing, 
+						   idempotentHint=nothing, openWorldHint=nothing)
+		# Validate hints if provided
+		if readOnlyHint !== nothing && destructiveHint !== nothing && readOnlyHint && destructiveHint
+			@warn "Tool cannot be both readOnly and destructive"
+			destructiveHint = false
+		end
+		new(title, readOnlyHint, destructiveHint, idempotentHint, openWorldHint)
+	end
 end
-ToolAnnotations(annotations_data::Dict{String, Any}) = ToolAnnotations(
-    title = get(annotations_data, "title", nothing),
-    readOnlyHint = get(annotations_data, "readOnlyHint", nothing),
-    destructiveHint = get(annotations_data, "destructiveHint", nothing),
-    idempotentHint = get(annotations_data, "idempotentHint", nothing),
-    openWorldHint = get(annotations_data, "openWorldHint", nothing)
-)
+
+# Enhanced constructor for ToolAnnotations from Dict with validation
+function ToolAnnotations(annotations_data::Dict{String, Any})
+	title = get(annotations_data, "title", nothing)
+	readOnlyHint = get(annotations_data, "readOnlyHint", nothing)
+	destructiveHint = get(annotations_data, "destructiveHint", nothing)
+	idempotentHint = get(annotations_data, "idempotentHint", nothing)
+	openWorldHint = get(annotations_data, "openWorldHint", nothing)
+	
+	return ToolAnnotations(; title, readOnlyHint, destructiveHint, idempotentHint, openWorldHint)
+end
 
 struct MCPToolSpecification <: AbstractMCPTool
 	server_id::String # TODO WE ACTUALLY don't have this data???
