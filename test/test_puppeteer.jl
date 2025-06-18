@@ -10,7 +10,7 @@ add_server(collector, "puppeteer", path="mcp/servers/src/puppeteer/dist/index.js
 
 # Get available tools
 tools = list_tools(collector, "puppeteer")
-println([tool["name"] for tool in tools])
+println([tool.name for tool in tools])
 # Navigate to a website
 response = call_tool(collector, "puppeteer", "puppeteer_navigate", Dict(
     "url" => "https://example.com",
