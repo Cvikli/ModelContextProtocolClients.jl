@@ -241,14 +241,34 @@ function initialize(client::MCPClient;
         ),
         "capabilities" => capabilities
     )
-    check_process_exited(client.transport)
-    println("initialize $params")
-    response = send_request(client, method="initialize", params=params)
-    # TODO we get back client description!! We should use it and save it to client.description!! also analyze things
-    # Send initialized notification after successful initialization
-    response !== nothing && send_notification(client, method="notifications/initialized")
     
-    return response
+    # Add retry mechanism
+    max_retries = 3
+    retry_delay = 0.5
+    
+    for attempt in 1:max_retries
+        try
+            check_process_exited(client.transport)
+            client.log_level == :debug && @debug "Sending initialize request (attempt $attempt)"
+            response = send_request(client, method="initialize", params=params)
+            
+            if response !== nothing
+                # Send initialized notification after successful initialization
+                send_notification(client, method="notifications/initialized")
+                return response
+            end
+        catch e
+            if attempt < max_retries
+                client.log_level == :debug && @debug "Initialize attempt $attempt failed: $e, retrying..."
+                sleep(retry_delay * attempt)
+            else
+                @error "Failed to initialize after $max_retries attempts: $e"
+                rethrow(e)
+            end
+        end
+    end
+    
+    return nothing
 end
 
 function send_notification(client::MCPClient; method::String, params::Dict=Dict())
@@ -296,7 +316,14 @@ function send_request(client::MCPClient; method::String, params::Dict=Dict())
     # Use keyword constructor for @kwdef struct
     request = JSONRPCRequest(id=req_id, method=method, params=params)
     json_str = JSON.json(request)
-    write_message(client.transport, json_str)
+    
+    try
+        write_message(client.transport, json_str)
+    catch e
+        client.log_level == :debug && @debug "Error sending request: $e"
+        client.pending_requests[req_id] = false
+        rethrow(e)
+    end
     
     # Wait for response with timeout
     timeout = 5.0
@@ -304,6 +331,12 @@ function send_request(client::MCPClient; method::String, params::Dict=Dict())
     
     while client.pending_requests[req_id] && (time() - start_time < timeout)
         sleep(0.1)
+    end
+    
+    if client.pending_requests[req_id]
+        client.log_level == :debug && @debug "Request timed out: $method"
+        client.pending_requests[req_id] = false
+        return nothing
     end
     
     return haskey(client.responses, req_id) ? client.responses[req_id] : nothing
@@ -318,9 +351,19 @@ function call_tool(client::MCPClient, tool_name::String, arguments::Dict)
     content = Content[]
     for item in response.result["content"]
         if item["type"] == "text"
-            push!(content, TextContent(text=item["text"], annotations=get(item, "annotations", nothing)))
+            annotations = if haskey(item, "annotations") && item["annotations"] !== nothing
+                Annotations(item["annotations"])
+            else
+                nothing
+            end
+            push!(content, TextContent(text=item["text"], annotations=annotations))
         elseif item["type"] == "image"
-            push!(content, ImageContent(data=item["data"], mimeType=item["mimeType"], annotations=get(item, "annotations", nothing)))
+            annotations = if haskey(item, "annotations") && item["annotations"] !== nothing
+                Annotations(item["annotations"])
+            else
+                nothing
+            end
+            push!(content, ImageContent(data=item["data"], mimeType=item["mimeType"], annotations=annotations))
         # Add other content types as needed
         end
     end
