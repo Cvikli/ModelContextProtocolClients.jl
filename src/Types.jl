@@ -66,17 +66,24 @@ struct InputSchema
 	type::String  # Always "object" for MCP tools
 	properties::Union{Dict{String,Any}, Nothing}
 	required::Union{Vector{String}, Nothing}
+	schema::Union{String, Nothing}
+	additionalProperties::Union{Bool, Nothing}
 	
-	# Constructor that enforces type = "object"
-	InputSchema(properties=nothing, required=nothing) = new("object", properties, required)
-	InputSchema(type::String, properties, required) = begin
-		type != "object" && @warn "InputSchema type should be 'object' for MCP tools, got '$type'"
-		new(type, properties, required)
-	end
-	InputSchema(input_schema_data::Dict{String, Any}) = InputSchema(
-		get(input_schema_data, "properties", nothing),
-		get(input_schema_data, "required", nothing)
-	)
+end
+# Constructor that enforces type = "object"
+InputSchema(properties::Dict{String, Any}, required::Vector{String}) = InputSchema("object", properties, required, nothing, nothing)
+InputSchema(type::String, properties::Dict{String, Any}, required::Vector{String}) = begin
+	type != "object" && @warn "InputSchema type should be 'object' for MCP tools, got '$type'"
+	InputSchema(type, properties, required, nothing, nothing)
+end
+InputSchema(data::Dict) = begin
+	schema = get(data, "\$schema", nothing)
+	type = data["type"]
+	properties = get(data, "properties", nothing)
+	required = get(data, "required", nothing)
+	additionalProperties = get(data, "additionalProperties", nothing)
+	
+	InputSchema(type, properties, required, schema, additionalProperties)
 end
 
 # Tool annotations based on MCP schema
@@ -109,19 +116,11 @@ end
 MCPToolSpecification(server_id::String, tool_dict::Dict{String, Any}, env::Union{Dict{String, T}, Nothing}) where T = begin
 	name = tool_dict["name"]
 	description = get(tool_dict, "description", nothing)
-	in_schema = tool_dict["inputSchema"]  # Fixed typo: was "in_shecma"
-	input_schema = InputSchema(in_schema["type"], get(in_schema, "properties", nothing), get(in_schema, "required", nothing))
+	input_schema = InputSchema(tool_dict["inputSchema"])
 	
 	# Parse annotations if present
 	annotations = if haskey(tool_dict, "annotations") && tool_dict["annotations"] !== nothing
-		ann_dict = tool_dict["annotations"]
-		ToolAnnotations(
-			title = get(ann_dict, "title", nothing),
-			readOnlyHint = get(ann_dict, "readOnlyHint", nothing),
-			destructiveHint = get(ann_dict, "destructiveHint", nothing),
-			idempotentHint = get(ann_dict, "idempotentHint", nothing),
-			openWorldHint = get(ann_dict, "openWorldHint", nothing)
-		)
+		ToolAnnotations(tool_dict["annotations"])
 	else
 		nothing
 	end
@@ -130,6 +129,70 @@ MCPToolSpecification(server_id::String, tool_dict::Dict{String, Any}, env::Union
 	MCPToolSpecification(server_id, name, description, input_schema, annotations, final_env)
 end
 
+
+# Constructor to parse result data from MCP responses
+function CallToolResult(result_data::Dict{String, Any})
+	content = Content[]
+	
+	# Handle nested result structure
+	actual_result = if haskey(result_data, "result")
+		result_data["result"]
+	else
+		result_data
+	end
+	
+	# Parse content array if present
+	if haskey(actual_result, "content") && isa(actual_result["content"], Vector)
+		for item in actual_result["content"]
+			if isa(item, Dict) && haskey(item, "type")
+				if item["type"] == "text"
+					push!(content, TextContent(
+						text = get(item, "text", ""),
+						annotations = get(item, "annotations", nothing)
+					))
+				elseif item["type"] == "image"
+					push!(content, ImageContent(
+						data = get(item, "data", ""),
+						mimeType = get(item, "mimeType", ""),
+						annotations = get(item, "annotations", nothing)
+					))
+				elseif item["type"] == "audio"
+					push!(content, AudioContent(
+						data = get(item, "data", ""),
+						mimeType = get(item, "mimeType", ""),
+						annotations = get(item, "annotations", nothing)
+					))
+				end
+			end
+		end
+	elseif isa(actual_result, String)
+		# Handle string result as text content
+		push!(content, TextContent(text = actual_result))
+	elseif isa(actual_result, Vector) && !isempty(actual_result) && isa(first(actual_result), String) && startswith(first(actual_result), "TextContent")
+		# Handle the specific case where result is a string representation of TextContent
+		text_content = join(actual_result, "\n")
+		# Extract the actual text from the TextContent string representation
+		if occursin("text='", text_content)
+			text_match = match(r"text='([^']*)'", text_content)
+			if text_match !== nothing
+				push!(content, TextContent(text = text_match.captures[1]))
+			else
+				push!(content, TextContent(text = text_content))
+			end
+		else
+			push!(content, TextContent(text = text_content))
+		end
+	else
+		# Fallback: convert to string
+		push!(content, TextContent(text = string(actual_result)))
+	end
+	
+	CallToolResult(
+		content = content,
+		isError = get(result_data, "isError", nothing),
+		_meta = get(result_data, "_meta", nothing)
+	)
+end
 
 @kwdef struct Resource
 	uri::String
