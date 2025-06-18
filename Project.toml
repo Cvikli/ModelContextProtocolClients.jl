@@ -1,7 +1,7 @@
 name = "ModelContextProtocolClients"
 uuid = "750441f6-5564-4fd1-a727-c2cc2a7bbcff"
 authors = ["Cvikli <havlikmarcell@gmail.com>"]
-version = "0.8.0"
+version = "0.8.1"
 
 [deps]
 HTTP = "cd3eb016-35fb-5094-929b-558a96fad6f3"
