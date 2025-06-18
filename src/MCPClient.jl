@@ -242,33 +242,16 @@ function initialize(client::MCPClient;
         "capabilities" => capabilities
     )
     
-    # Add retry mechanism
-    max_retries = 3
-    retry_delay = 0.5
-    
-    for attempt in 1:max_retries
-        try
-            check_process_exited(client.transport)
-            client.log_level == :debug && @debug "Sending initialize request (attempt $attempt)"
-            response = send_request(client, method="initialize", params=params)
-            
-            if response !== nothing
-                # Send initialized notification after successful initialization
-                send_notification(client, method="notifications/initialized")
-                return response
-            end
-        catch e
-            if attempt < max_retries
-                client.log_level == :debug && @debug "Initialize attempt $attempt failed: $e, retrying..."
-                sleep(retry_delay * attempt)
-            else
-                @error "Failed to initialize after $max_retries attempts: $e"
-                rethrow(e)
-            end
-        end
+    return @retry max_attempts=3 delay=(attempt) -> 0.5 * attempt begin
+        check_process_exited(client.transport)
+        client.log_level == :debug && @debug "Sending initialize request"
+        response = send_request(client, method="initialize", params=params)
+        
+        response !== nothing || error("Initialize failed - no response")
+        # Send initialized notification after successful initialization
+        send_notification(client, method="notifications/initialized")
+        response
     end
-    
-    return nothing
 end
 
 function send_notification(client::MCPClient; method::String, params::Dict=Dict())

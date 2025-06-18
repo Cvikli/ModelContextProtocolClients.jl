@@ -11,6 +11,7 @@ const JULIA_MCP_CLIENT  = "julia-mcp-client"
 const MCPClient_VERSION = "0.8.0"
 
 
+include("Utils.jl")
 include("Types.jl")
 include("JSON-RPC.jl")
 include("Transport.jl")
