@@ -19,7 +19,7 @@ struct Annotations
 end
 
 # Add constructor for Annotations from Dict with validation
-function Annotations(annotations_data::Dict{String, Any})
+function Annotations(annotations_data::Dict{String, T}) where T
 	audience = get(annotations_data, "audience", nothing)
 	priority = get(annotations_data, "priority", nothing)
 	
@@ -54,7 +54,7 @@ abstract type Content end
 end
 
 # Add constructor for TextContent from Dict
-function TextContent(content_data::Dict{String, Any})
+function TextContent(content_data::Dict{String, T}) where T
 	annotations = if haskey(content_data, "annotations") && content_data["annotations"] !== nothing
 		Annotations(content_data["annotations"])
 	else
@@ -68,11 +68,34 @@ function TextContent(content_data::Dict{String, Any})
 	)
 end
 
+# Helper function to format base64 data for display
+function format_data_url(data::AbstractString, mimeType::AbstractString, content_type::AbstractString)::String
+    # If it already has the data URL prefix, return as is
+    if startswith(data, "data:")
+        return data
+    end
+    
+    # If it's raw base64 data, add the proper prefix
+    if !isempty(mimeType)
+        return "data:$(mimeType);base64,$(data)"
+    end
+    
+    # Fallback based on content type
+    fallback_mime = content_type == "image" ? "image/png" : "audio/wav"
+    return "data:$(fallback_mime);base64,$(data)"
+end
+
 @kwdef struct ImageContent <: Content
 	type::String = "image"
 	data::String  # Base64-encoded image data
 	mimeType::String
 	annotations::Union{Annotations, Nothing} = nothing
+	
+	# Inner constructor to format data URL
+	function ImageContent(type, data, mimeType, annotations)
+		formatted_data = format_data_url(data, mimeType, "image")
+		new(type, formatted_data, mimeType, annotations)
+	end
 end
 
 @kwdef struct AudioContent <: Content
@@ -80,6 +103,12 @@ end
 	data::String  # Base64-encoded audio data
 	mimeType::String
 	annotations::Union{Annotations, Nothing} = nothing
+	
+	# Inner constructor to format data URL
+	function AudioContent(type, data, mimeType, annotations)
+		formatted_data = format_data_url(data, mimeType, "audio")
+		new(type, formatted_data, mimeType, annotations)
+	end
 end
 
 @kwdef struct EmbeddedResource <: Content
@@ -94,7 +123,297 @@ end
 	_meta::Union{Dict{String,Any}, Nothing} = nothing
 end
 
+# MCP Parse Error for better error handling
+struct MCPParseError <: Exception
+    message::String
+    data::Any
+end
 
+# Base content parsing function with type dispatch - handle both Dict{String,Any} and Dict{String,String}
+function parse_content(data::Dict{String, T}) where T
+    content_type = get(data, "type", "text")
+    
+    if content_type == "text"
+        return TextContent(data)
+    elseif content_type == "image"
+        return parse_image_content(data)
+    elseif content_type == "audio"
+        return parse_audio_content(data)
+    elseif content_type == "resource"
+        return parse_embedded_resource(data)
+    else
+        @warn "Unknown content type: $content_type, falling back to text"
+        return TextContent(text = string(data))
+    end
+end
+
+# Specialized parsing functions
+function parse_image_content(data::Dict{String, T}) where T
+    annotations = get(data, "annotations", nothing)
+    if annotations !== nothing
+        annotations = Annotations(annotations)
+    end
+    
+    return ImageContent(
+        data = get(data, "data", ""),
+        mimeType = get(data, "mimeType", ""),
+        annotations = annotations
+    )
+end
+
+function parse_audio_content(data::Dict{String, T}) where T
+    annotations = get(data, "annotations", nothing)
+    if annotations !== nothing
+        annotations = Annotations(annotations)
+    end
+    
+    return AudioContent(
+        data = get(data, "data", ""),
+        mimeType = get(data, "mimeType", ""),
+        annotations = annotations
+    )
+end
+
+function parse_embedded_resource(data::Dict{String, T}) where T
+    resource_data = data["resource"]
+    resource = if haskey(resource_data, "text")
+        TextResourceContents(
+            resource_data["uri"],
+            get(resource_data, "mimeType", nothing),
+            resource_data["text"]
+        )
+    else
+        BlobResourceContents(
+            resource_data["uri"],
+            get(resource_data, "mimeType", nothing),
+            resource_data["blob"]
+        )
+    end
+    
+    annotations = get(data, "annotations", nothing)
+    if annotations !== nothing
+        annotations = Annotations(annotations)
+    end
+    
+    return EmbeddedResource(resource = resource, annotations = annotations)
+end
+
+# Safe content parsing with error handling
+function safe_parse_content(data::Any)
+    try
+        if isa(data, Dict)
+            return parse_content(data)
+        else
+            return TextContent(text = string(data))
+        end
+    catch e
+        @warn "Failed to parse content" exception=e data=data
+        return TextContent(text = "Parse error: $(string(data))")
+    end
+end
+
+# Improved result content parsing with multiple dispatch
+function parse_result_content(result::Dict{String, T})::Vector{Content} where T
+    if haskey(result, "content") && isa(result["content"], Vector)
+        return [safe_parse_content(item) for item in result["content"]]
+    else
+        # Fallback for unexpected format
+        return [TextContent(text = JSON.json(result))]
+    end
+end
+
+function parse_result_content(result::String)::Vector{Content}
+    # Handle complex string format like "[TextContent(...), ImageContent(...)]"
+    if startswith(result, "[") && endswith(result, "]")
+        # Try to parse as structured content string (fallback for legacy formats)
+        parsed_content = parse_content_string_fallback(result)
+        return isempty(parsed_content) ? [TextContent(text = result)] : parsed_content
+    else
+        # Simple string result
+        return [TextContent(text = result)]
+    end
+end
+
+function parse_result_content(result::Vector)::Vector{Content}
+    # For vector results, try to parse each element
+    contents = Content[]
+    for item in result
+        if isa(item, Dict)
+            push!(contents, safe_parse_content(item))
+        elseif isa(item, String)
+            push!(contents, TextContent(text = item))
+        end
+    end
+    return contents
+end
+
+# Fallback for any other type
+function parse_result_content(result::Any)::Vector{Content}
+    return [TextContent(text = string(result))]
+end
+
+# Legacy string parsing fallback (improved regex patterns)
+function parse_content_string_fallback(content_str::String)::Vector{Content}
+    contents = Content[]
+    
+    # Improved pattern matching for TextContent - handle escaped quotes and capture full text
+    if occursin("TextContent", content_str)
+        # More robust pattern that handles quotes within the text content
+        # This pattern looks for text= followed by a quote, then captures everything until the matching quote
+        # while handling escaped quotes properly
+        text_pattern = r"TextContent\([^)]*text=\"([^\"]*(?:\\.[^\"]*)*)\""
+        text_matches = eachmatch(text_pattern, content_str)
+        for m in text_matches
+            # Unescape the captured text
+            text = replace(m.captures[1], "\\\"" => "\"", "\\'" => "'")
+            push!(contents, TextContent(; text = text))
+        end
+        
+        # Also try single quotes if double quotes didn't work
+        if isempty(text_matches)
+            text_pattern_single = r"TextContent\([^)]*text='([^']*(?:\\.[^']*)*)'"
+            text_matches = eachmatch(text_pattern_single, content_str)
+            for m in text_matches
+                text = replace(m.captures[1], "\\\"" => "\"", "\\'" => "'")
+                push!(contents, TextContent(; text = text))
+            end
+        end
+    end
+    
+    # Improved pattern matching for ImageContent
+    if occursin("ImageContent", content_str)
+        # Extract image content with better pattern matching
+        data_pattern = r"data='([^']+)'"
+        mime_pattern = r"mimeType='([^']+)'"
+        
+        # Find ImageContent blocks
+        image_blocks = eachmatch(r"ImageContent\([^)]+\)", content_str)
+        for block in image_blocks
+            block_str = block.match
+            data_match = match(data_pattern, block_str)
+            mime_match = match(mime_pattern, block_str)
+            
+            if data_match !== nothing && mime_match !== nothing
+                push!(contents, ImageContent(
+                    data = data_match.captures[1],
+                    mimeType = mime_match.captures[1]
+                ))
+            end
+        end
+    end
+    
+    return contents
+end
+
+# Improved CallToolResult constructor
+function CallToolResult(result_data::Dict{String, T}) where T
+    # Handle nested result structure more cleanly
+    actual_result = get(result_data, "result", result_data)
+    
+    # Parse content based on type using multiple dispatch
+    content = parse_result_content(actual_result)
+    
+    return CallToolResult(
+        content = content,
+        isError = get(result_data, "isError", false),
+        _meta = get(result_data, "_meta", nothing)
+    )
+end
+
+# Validation functions
+function validate_content(content::TextContent)
+    isempty(content.text) && throw(ArgumentError("TextContent text cannot be empty"))
+    return true
+end
+
+function validate_content(content::ImageContent)
+    isempty(content.data) && throw(ArgumentError("ImageContent data cannot be empty"))
+    isempty(content.mimeType) && throw(ArgumentError("ImageContent mimeType cannot be empty"))
+    return true
+end
+
+function validate_content(content::AudioContent)
+    isempty(content.data) && throw(ArgumentError("AudioContent data cannot be empty"))
+    isempty(content.mimeType) && throw(ArgumentError("AudioContent mimeType cannot be empty"))
+    return true
+end
+
+# Dispatch-based result2string for different content types
+mcp_result2string(content::TextContent)::String = content.text
+mcp_result2string(content::ImageContent)::Union{String, Nothing} = nothing
+mcp_result2string(content::AudioContent)::Union{String, Nothing} = nothing
+mcp_result2string(content::EmbeddedResource)::Union{String, Nothing} = nothing
+
+# CallToolResult formatting - only concatenate non-nothing text results
+function mcp_result2string(result::CallToolResult)::String
+    isnothing(result) && return "No result"
+    
+    text_parts = String[]
+    
+    # Extract only text content using dispatch
+    for content in result.content
+        @show typeof(content)
+        text_result = mcp_result2string(content)
+        if text_result !== nothing
+            push!(text_parts, text_result)
+        end
+    end
+    
+    return join(text_parts, "\n")
+end
+
+# Fallback for when result is nothing
+mcp_result2string(::Nothing)::String = "No result"
+
+# Extract base64 image data from MCP tool results
+function mcp_resultimg2base64(tool::CallToolResult)::Vector{String}
+    images = String[]
+    tool === nothing && return images
+    for content in tool.content
+        if isa(content, ImageContent)
+            push!(images, content.data)
+        end
+    end
+    return images
+end
+
+# Extract base64 audio data from MCP tool results  
+function mcp_resultaudio2base64(tool::CallToolResult)::Vector{String}
+    audios = String[]
+    tool === nothing && return audios
+    for content in tool.content
+        if isa(content, AudioContent)
+            push!(audios, content.data)
+        end
+    end
+    return audios
+end
+
+# # Pretty printing for debugging
+# function Base.show(io::IO, ::MIME"text/plain", content::TextContent)
+#     print(io, "TextContent(")
+#     if length(content.text) > 50
+#         print(io, "\"", first(content.text, 47), "...\"")
+#     else
+#         print(io, "\"", content.text, "\"")
+#     end
+#     content.annotations !== nothing && print(io, ", annotations=", content.annotations)
+#     print(io, ")")
+# end
+
+# function Base.show(io::IO, ::MIME"text/plain", content::ImageContent)
+#     print(io, "ImageContent(mimeType=\"", content.mimeType, "\"")
+#     print(io, ", size=", length(content.data), " bytes")
+#     content.annotations !== nothing && print(io, ", annotations=", content.annotations)
+#     print(io, ")")
+# end
+
+# function Base.show(io::IO, ::MIME"text/plain", content::AudioContent)
+#     print(io, "AudioContent(mimeType=\"", content.mimeType, "\"")
+#     print(io, ", size=", length(content.data), " bytes")
+#     content.annotations !== nothing && print(io, ", annotations=", content.annotations)
+#     print(io, ")")
+# end
 
 # Tool-related types
 abstract type AbstractMCPTool end
@@ -108,8 +427,8 @@ struct InputSchema
 	
 end
 # Constructor that enforces type = "object"
-InputSchema(properties::Dict{String, Any}, required::Vector{String}) = InputSchema("object", properties, required, nothing, nothing)
-InputSchema(type::String, properties::Dict{String, Any}, required::Vector{String}) = begin
+InputSchema(properties::Dict{String, T}, required::Vector{String}) where T = InputSchema("object", properties, required, nothing, nothing)
+InputSchema(type::String, properties::Dict{String, T}, required::Vector{String}) where T = begin
 	type != "object" && @warn "InputSchema type should be 'object' for MCP tools, got '$type'"
 	InputSchema(type, properties, required, nothing, nothing)
 end
@@ -143,7 +462,7 @@ struct ToolAnnotations
 end
 
 # Enhanced constructor for ToolAnnotations from Dict with validation
-function ToolAnnotations(annotations_data::Dict{String, Any})
+function ToolAnnotations(annotations_data::Dict{String, T}) where T
 	title = get(annotations_data, "title", nothing)
 	readOnlyHint = get(annotations_data, "readOnlyHint", nothing)
 	destructiveHint = get(annotations_data, "destructiveHint", nothing)
@@ -164,7 +483,7 @@ struct MCPToolSpecification <: AbstractMCPTool
 end
 
 # Constructor for MCPToolSpecification from tool dictionary
-MCPToolSpecification(server_id::String, tool_dict::Dict{String, Any}, env::Union{Dict{String, T}, Nothing}) where T = begin
+MCPToolSpecification(server_id::String, tool_dict::Dict{String, T}, env::Union{Dict{String, T2}, Nothing}) where {T, T2} = begin
 	name = tool_dict["name"]
 	description = get(tool_dict, "description", nothing)
 	input_schema = InputSchema(tool_dict["inputSchema"])
@@ -180,71 +499,6 @@ MCPToolSpecification(server_id::String, tool_dict::Dict{String, Any}, env::Union
 	MCPToolSpecification(server_id, name, description, input_schema, annotations, final_env)
 end
 
-
-# Constructor to parse result data from MCP responses
-function CallToolResult(result_data::Dict{String, Any})
-	content = Content[]
-	
-	# Handle nested result structure
-	actual_result = if haskey(result_data, "result")
-		result_data["result"]
-	else
-		result_data
-	end
-	
-	# Parse content array if present
-	if haskey(actual_result, "content") && isa(actual_result["content"], Vector)
-		for item in actual_result["content"]
-			if isa(item, Dict) && haskey(item, "type")
-				if item["type"] == "text"
-					push!(content, TextContent(
-						text = get(item, "text", ""),
-						annotations = get(item, "annotations", nothing)
-					))
-				elseif item["type"] == "image"
-					push!(content, ImageContent(
-						data = get(item, "data", ""),
-						mimeType = get(item, "mimeType", ""),
-						annotations = get(item, "annotations", nothing)
-					))
-				elseif item["type"] == "audio"
-					push!(content, AudioContent(
-						data = get(item, "data", ""),
-						mimeType = get(item, "mimeType", ""),
-						annotations = get(item, "annotations", nothing)
-					))
-				end
-			end
-		end
-	elseif isa(actual_result, String)
-		# Handle string result as text content
-		push!(content, TextContent(text = actual_result))
-	elseif isa(actual_result, Vector) && !isempty(actual_result) && isa(first(actual_result), String) && startswith(first(actual_result), "TextContent")
-		# Handle the specific case where result is a string representation of TextContent
-		text_content = join(actual_result, "\n")
-		# Extract the actual text from the TextContent string representation
-		if occursin("text='", text_content)
-			text_match = match(r"text='([^']*)'", text_content)
-			if text_match !== nothing
-				push!(content, TextContent(text = text_match.captures[1]))
-			else
-				push!(content, TextContent(text = text_content))
-			end
-		else
-			push!(content, TextContent(text = text_content))
-		end
-	else
-		# Fallback: convert to string
-		push!(content, TextContent(text = string(actual_result)))
-	end
-	
-	CallToolResult(
-		content = content,
-		isError = get(result_data, "isError", nothing),
-		_meta = get(result_data, "_meta", nothing)
-	)
-end
-
 @kwdef struct Resource
 	uri::String
 	name::String
@@ -255,7 +509,6 @@ end
 end
 
 const RequestId = Union{String, Int}  # JSON-RPC Types
-
 
 @kwdef struct JSONRPCRequest
 	jsonrpc::String = "2.0"
