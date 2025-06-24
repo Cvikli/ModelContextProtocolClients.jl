@@ -340,19 +340,16 @@ end
 
 # Dispatch-based result2string for different content types
 mcp_result2string(content::TextContent)::String = content.text
-mcp_result2string(content::ImageContent)::Union{String, Nothing} = nothing
-mcp_result2string(content::AudioContent)::Union{String, Nothing} = nothing
-mcp_result2string(content::EmbeddedResource)::Union{String, Nothing} = nothing
+mcp_result2string(content::Union{ImageContent, AudioContent, EmbeddedResource})::Union{String, Nothing} = nothing
 
 # CallToolResult formatting - only concatenate non-nothing text results
-function mcp_result2string(result::CallToolResult)::String
-    isnothing(result) && return "No result"
+function mcp_result2string(result::Union{CallToolResult, Nothing})::String
+    result === nothing && return "No result"
     
     text_parts = String[]
     
     # Extract only text content using dispatch
     for content in result.content
-        @show typeof(content)
         text_result = mcp_result2string(content)
         if text_result !== nothing
             push!(text_parts, text_result)
@@ -362,8 +359,6 @@ function mcp_result2string(result::CallToolResult)::String
     return join(text_parts, "\n")
 end
 
-# Fallback for when result is nothing
-mcp_result2string(::Nothing)::String = "No result"
 
 # Extract base64 image data from MCP tool results
 function mcp_resultimg2base64(tool::CallToolResult)::Vector{String}
