@@ -71,6 +71,9 @@ function load_mcp_servers_config(collector::MCPClientCollector, config_path::Str
 		servers_config = config["mcp"]["servers"]
 	elseif haskey(config, "mcpServers")
 		servers_config = config["mcpServers"]
+  elseif isempty(config)
+    @info "No MCP servers found in the config file."
+    return
 	else
 		throw(ErrorException("Invalid MCP server configuration format. Expected 'mcp.servers' or 'mcpServers' key in the config file."))
 	end
