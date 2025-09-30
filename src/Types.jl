@@ -258,23 +258,22 @@ function parse_content_string_fallback(content_str::String)::Vector{Content}
     
     # Improved pattern matching for TextContent - handle escaped quotes and capture full text
     if occursin("TextContent", content_str)
-        # More robust pattern that handles quotes within the text content
-        # This pattern looks for text= followed by a quote, then captures everything until the matching quote
-        # while handling escaped quotes properly
-        text_pattern = r"TextContent\([^)]*text=\"([^\"]*(?:\\.[^\"]*)*)\""
+        # Pattern that properly handles escaped quotes by matching until unescaped quote
+        # This uses a negative lookbehind to ensure we don't stop at escaped quotes
+        text_pattern = r"TextContent\([^)]*text='((?:[^'\\]|\\.)*)'"
         text_matches = eachmatch(text_pattern, content_str)
         for m in text_matches
             # Unescape the captured text
-            text = replace(m.captures[1], "\\\"" => "\"", "\\'" => "'")
+            text = replace(m.captures[1], "\\'" => "'", "\\\"" => "\"", "\\n" => "\n", "\\r" => "\r", "\\t" => "\t")
             push!(contents, TextContent(; text = text))
         end
         
-        # Also try single quotes if double quotes didn't work
+        # Also try double quotes if single quotes didn't work
         if isempty(text_matches)
-            text_pattern_single = r"TextContent\([^)]*text='([^']*(?:\\.[^']*)*)'"
-            text_matches = eachmatch(text_pattern_single, content_str)
+            text_pattern_double = r"TextContent\([^)]*text=\"((?:[^\"\\]|\\.)*)\""
+            text_matches = eachmatch(text_pattern_double, content_str)
             for m in text_matches
-                text = replace(m.captures[1], "\\\"" => "\"", "\\'" => "'")
+                text = replace(m.captures[1], "\\'" => "'", "\\\"" => "\"", "\\n" => "\n", "\\r" => "\r", "\\t" => "\t")
                 push!(contents, TextContent(; text = text))
             end
         end
