@@ -306,7 +306,48 @@ end
 
 # Improved CallToolResult constructor
 function CallToolResult(result_data::Dict{String, T}) where T
-    # Handle nested result structure more cleanly
+    # Check for new result_json format first (preferred)
+    if haskey(result_data, "result_json") && result_data["result_json"] !== nothing
+        result_json = result_data["result_json"]
+        
+        # Parse the result_json array directly - initialize content first
+        content = Content[]
+        
+        if isa(result_json, Vector)
+            for item in result_json
+                if isa(item, Dict)
+                    content_type = get(item, "type", "text")
+                    
+                    if content_type == "text"
+                        push!(content, TextContent(item))
+                    elseif content_type == "image"
+                        push!(content, parse_image_content(item))
+                    elseif content_type == "audio"
+                        push!(content, parse_audio_content(item))
+                    elseif content_type == "resource"
+                        push!(content, parse_embedded_resource(item))
+                    else
+                        @warn "Unknown content type in result_json: $content_type"
+                        push!(content, TextContent(text = string(item)))
+                    end
+                else
+                    # Fallback for non-dict items
+                    push!(content, TextContent(text = string(item)))
+                end
+            end
+        else
+            # Fallback if result_json is not a vector
+            content = [TextContent(text = string(result_json))]
+        end
+        
+        return CallToolResult(
+            content = content,
+            isError = get(result_data, "isError", false),
+            _meta = get(result_data, "_meta", nothing)
+        )
+    end
+    
+    # Fallback to old parsing logic for backward compatibility
     actual_result = get(result_data, "result", result_data)
     
     # Parse content based on type using multiple dispatch

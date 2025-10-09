@@ -93,4 +93,44 @@ using ModelContextProtocolClients: validate_content
         @test_throws ArgumentError validate_content(ImageContent(data = "", mimeType = "image/png"))
         @test_throws ArgumentError validate_content(ImageContent(data = "data", mimeType = ""))
     end
+
+    @testset "New result_json Format" begin
+        # Test the new result_json format from Gmail MCP
+        result_data = Dict{String, Any}(
+            "result_json" => [
+                Dict(
+                    "type" => "text",
+                    "text" => "ID: 199c8a53131626ba\nSubject: xAI's Grok coding model \n",
+                    "annotations" => nothing,
+                    "meta" => nothing
+                )
+            ],
+            "result" => "ID: 199c8a53131626ba\nSubject: xAI's Grok coding model arrives in VS Code..."
+        )
+        
+        result = CallToolResult(result_data)
+        
+        @test length(result.content) == 1
+        @test result.content[1] isa TextContent
+        @test occursin("xAI's Grok coding model", result.content[1].text)
+        @test occursin("199c8a53131626ba", result.content[1].text)
+    end
+    
+    @testset "result_json with Multiple Content Types" begin
+        # Test result_json with mixed content types
+        result_data = Dict{String, Any}(
+            "result_json" => [
+                Dict("type" => "text", "text" => "Email results:", "annotations" => nothing),
+                Dict("type" => "image", "data" => "base64imagedata", "mimeType" => "image/png", "annotations" => nothing)
+            ]
+        )
+        
+        result = CallToolResult(result_data)
+        
+        @test length(result.content) == 2
+        @test result.content[1] isa TextContent
+        @test result.content[1].text == "Email results:"
+        @test result.content[2] isa ImageContent
+        @test result.content[2].mimeType == "image/png"
+    end
 end
